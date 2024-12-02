@@ -7,7 +7,8 @@ Code and scripts for ICES stock synthesis benchmark models
 4.	Script for the F Forecast but with also biomass options, same SSB as year before, Btrigger and Blim (Henning to be modified for ICES purposes)
 5.	Run script for running MSE to estimate reference points as from WKREFNEW reccomandations (example with 2 models, a best case and a robustness test; 3 scripts)
 
-   Scripts for additional useful diagnostics
+Scripts for additional useful diagnostics
+
 6.	Script for profiling M and h at the same time (new from Laurie, I have it)
 7.	Script for profiling M at age 
 8.	Script for jittering (I have it from NOAA, new wrapper)
