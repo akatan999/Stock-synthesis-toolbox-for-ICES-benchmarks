@@ -1,5 +1,5 @@
 # Stock-synthesis-toolbox-for-ICES-benchmarks
-Code and scripts for ICES stock synthesis benchmarked models
+Code and scripts for ICES stock synthesis benchmark models
 
 1.	Run script (1. Ensemble_grid_Northern Seabass_example.R) for creating the models grid diagnostic table (1. Ensemble_grid_Northern Seabass_example.R); it creates the diags table and some plots of the next script
 2.	Run script (2. Diags_Compare_refruns_lobster3a example.Rmd) for presenting and comparing the different models of the grid 
