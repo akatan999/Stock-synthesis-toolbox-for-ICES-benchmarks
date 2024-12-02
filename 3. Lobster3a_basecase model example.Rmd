@@ -138,7 +138,7 @@ if (Sys.info()["sysname"] == "Windows") {
 }
 ```
 
-Load reference run
+Load reference run (produced by 1. Ensemble_grid_Lobster3a example.R) 
 
 ```{r}
 
