@@ -10,4 +10,5 @@ Code and scripts for ICES stock synthesis benchmark models
 7.	Script for profiling M at age 
 8.	Script for jittering (I have it from NOAA, new wrapper)
 9.	Use fishlife for estimating life history priors (Fishlife.R)
+10.	Identify parameters that changes when running the retro (Retro_sensitivity.R)
 
