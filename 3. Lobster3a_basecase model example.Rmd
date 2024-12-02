@@ -1,0 +1,1178 @@
+---
+title: "Candidate benchmark model for European lobster in 3a"
+
+author: 
+ - Max Cardinale (SLU) 
+
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    #keep_tex: false
+vignette: >
+  %\VignetteIndexEntry{benchmark Vignetted}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r wrap-hook, echo = FALSE,warning=F,message=F}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+```{r, echo = FALSE,warning=F,message=F}
+
+knitr::opts_chunk$set(collapse = TRUE, comment = "  " ,fig.align = 'center', cache=FALSE,tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+
+# Draft conclusions and recommendations
+
++ The benchmark assessment of European lobster in ICES division 3a was conducted in June-October 2024 using the Stock Synthesis (SS) model (Methot & Wetzel 2013)
+
++ Benchmark was conducted comparing 7 different model configurations, which were evaluated through diagnostic
+
++ The Working Group on Stock Assessment of Lobster in 3a proposed Run2 as the final model configuration to be used for stock assessment and management. Run2 has the same diagnostic score than Run3 and Run6 but a better convergence and therefore was chosen as the final run 
+
++ Forecast settings: R from the Beverton & Holt stock-recruitment curve, biology and selectivity as the average of the last 5 years, Ftarget is FMSY. BMSY is about 41% of unfished SSB  
+
+# Base Case Model Development
+
+The previous advice concluded that the stock was in overfishing and overfished; however SSB shows a positive trend in the last five years but below the target reference point ($B{MSY}$). Fishing pressure was estimated to be above $F/F_{MSY}$.
+
++ The benchmark model is a one-area yearly model where the population is comprised of 25+ age-classes with two sexes (males and females are considered as separated). The model is a length-based model where the numbers at length in the fisheries and survey data are converted into ages using the von Bertalanffy growth function. The model started in 1875 and it includes 8 fleets: 1 commercial fisheries, 1 recreational fisheries and 6 surveys. LFDs are available for 2 of the fleets. 
+
++ This document presents the candidate benchmark model run. This model was initially set up based on the discussions held during the data preparation meeting, which was held in June 2024. This new set of models includes revised survey indices after standardisation.    
+
+## Data revisions 
+
+  + All modern surveys were standardised 
+
+  + Revision of lenght composition data
+
+## Model setting
+
+ + Maximum age in the population set to 25 years (population plus group)
+ 
+ + Growth parameters separated for females and males using the von Bertallanfy function
+ 
+ + Fixing of CV young and old individuals at 0.15 and 0.10 respectively
+ 
+ + Fixing age varying, time unvarying $M$ for females and males separately
+ 
+ + Estimating selectivity for the commercial fleet and VC_2017 survey
+ 
+ + Early recruitment era start in 1875
+ 
+ + Extra standard deviation was assumed for several surveys
+ 
+ 
+## Benchmark trial runs
+
+Model Directory 
+
++ Reference run 
+
++ Run1 : As Reference run but assuming low catches
+
++ Run2 : As Reference run but assuming high catches
+
++ Run3 : As Reference run, low steepness  
+
++ Run4 : As Reference run, high steepness  
+
++ Run5 : As Reference run, time varying selectivity of the commercial fleet since 2018
+
++ Run6 : As Reference run, high catches, low steepness
+
+
+## Work flow 
+
++ Run first the file Ensemble_grid_Lobster3a.R, which creates input files for the files (Lobster3a_basecase model.Rmd) and the Diags_Compare_refruns_lobster3a.Rmd. The latter visualize the comparison between the different model alternatives, the first instead focus on the basecase model as selected by diagnostic (Run2 in this case).
+
+
+Load R packages 
+
+```{r,warning=F,message=F}
+library(r4ss)
+library(ss3diags)
+library(ggplot2)
+library(ggpubr)
+library(FLCore)
+library(ggplotFL)
+library(FLSRTMB)
+library(FLRef)
+library(ss3om)
+library(png)
+library(parallel)
+library(doParallel)
+cl <- makeCluster(10, type="PSOCK")
+registerDoParallel(cl)
+```
+
+Some system specific setups (Linux vs Windows)
+
+```{r,warning=F,message=F}
+if (Sys.info()["sysname"] == "Windows") {
+
+    ss.exe   <- "~/Max/Stock_synthesis/ss3_3.22.1/ss3.exe"
+    main.dir <- "~/Max/Commitees/National stocks/Lobster 3a"
+    MC.CORES <- 3
+    print("mc.cores set to 1, NO PARALLELISATION on Windows :( ")
+
+} else {
+
+    SS_EXE <- "~/Max/Executives_SS/ss_linux"
+    main.dir <- "~/Max/WKBENCH 2023/Central Baltic herring/Ensemble"
+}
+```
+
+Load reference run
+
+```{r}
+
+# 2024 reference case
+load("rdata_runs/Lobster3a_Run2.rdata",verbose=F)
+ref = ss3rep
+
+# load retrospective runs
+load("rdata_retros/RetroModels_Run2.rdata",verbose=F)
+
+# load steepness profile
+load("Reference_run/profile/profile_h.ref.rdata",verbose=F)
+
+```
+
+## Fishery Data
+
++ Catch data were available for commercial and recreational fleets.  
+
++ Alternative time series of recreational catches were tested
+
+```{r fig1, fig.height=5,fig.width=7, fig.cap = paste0("Time series of annual total catches for European lobster in 3a, illustrated as disaggregated by Season (top) and Fleets (bottom) through 2023")}
+mod = ref
+df.catch = mod$catch
+df.catch$Season = factor(df.catch$Seas)
+
+pc1 = ggplot(df.catch,
+             aes(Yr,Obs,fill=Fleet_Name))+theme_bw()+
+  geom_bar(position="stack", stat="identity")+
+  ylab("Catch")+xlab("Year")+
+  scale_x_continuous(expand = c(0.01, 0))+
+  scale_y_continuous(expand = c(0.01, 0))+
+  scale_fill_manual(
+    values=sscol(length(unique(df.catch$Fleet))))
+  
+pc1
+```
+
++ Sex-structured length data (LFDs) were available for commercial catches and VCD_2017. The final cleaned and revised available input data time series are shown in Figure 2.
+
++ 
+
+```{r fig2, fig.height=10,fig.width=7, fig.cap = paste0("Illustration of time series data for catches, LFDs and the survey indeces that were adopted as input for the Stock Synthesis model during the benchmark session for the 2024 reference model.")}
+
+SSplotData(ref,subplots=2)
+
+```
+
+## Survey
+
++ Six survey indices were include in the model. All modern surveys were standardised. 
+
++ The survey LFD data were available only for VCD_2017 survey. 
+
+
+```{r fig3, fig.height=5,fig.width=7, fig.cap = paste0("Survey indices")}
+knitr::include_graphics("index9_standcpueall.png")
+```
+
+\pagebreak
+
+## Model specifications
+
++ The reference model for European lobster in 3a is an annual, sex-structured length-based Stock Synthesis model. The underlying age-structured dynamics is set up to comprise ages 0-25, where age 25 was treated as a plus group. The population was modeled as sex-structured with sex-specific parameterisations for somatic growth and $M-at-age$. Stock fecundity was assumed to be proportional to female spawning stock biomass. 
+
++ For the reference model, the sex specific growth is fixed for both sexes using Von Bertalanffy model (Figure 6). $L_at_Amin$ and $L_at_Amax$ were specified as 0.5 and 25 years, respectively. The CVs for $L_at_Amin$ were set to 0.15 and for $L_at_Amax$ to 0.1. 
+
+```{r fig4, fig.height=5,fig.width=7, fig.cap = paste0("Growth functions for Female and Males.")}
+sspar(mfrow=c(1,1),plot.cex = 0.7)
+SSplotBiology(mod,subplots=1,main=F)
+
+```
+
++ Female maturity was assumed to have the form of a logistic ogive with a length at 50\% maturity ($L_{m_{50}}$) being attained 7.8 cm and a slope of -0.97 1/cm (Figure 7). $L_{m_{50}}$ corresponds approximately to a female of age-5.
+
+```{r fig5, fig.height=5,fig.width=7, fig.cap = paste0("Assumed Maturity ogive for females.")}
+sspar(mfrow=c(1,1),plot.cex = 0.7)
+SSplotBiology(mod,subplots=6,main=F)
+
+```
+
++ Sex-specific natural mortality at age ($M_a$) were inputed for age 0, 1, 4, 5, 10 and 20 and were based on tagging carried out in the Kåvra marine reserve  
+
+```{r fig6, fig.height=5,fig.width=7, fig.cap = paste0("Assumed age-specific natural mortality vectors for females and males.")}
+sspar(mfrow=c(1,1),plot.cex = 0.7)
+SSplotBiology(ref,subplots=21,main=F)
+
+```
+
++ Nominal spawning and settling time were set to January. The expected mean recruitment was assumed to follows a Beverton and Holt stock recruitment relationship. For the base-case a steepness of $h = 0.8$ was assumed. Recruitment deviations were estimated for 2010-2017 as main recruitment deviations and for the preceding years 1875-2009 as early recruitment deviations. Recruitment deviations were assumed to have a penalty of 0.5 on the standard deviation (sigmaR). 
+
++ All fleets assumed a double-normal (dome-shaped) selectivity (option 24). 
+
++ A time-varying selectivity was enabled for the commercial fleet (Figure 9).
+
++ Fishing mortality was modeled using a fleet-specific hybrid F method (Option 4), which is consistent with best practice. Option five was selected for the fishing mortality (F) report basis; this option corresponded to the simple unweighted average of the F of the age classes chosen to represent the Fbar (age 8–13). 
+
+\pagebreak
+
+## Model Diagnostics
+
+Prepare outputs of retrospective runs (see Supplement)
+
+```{r}
+retro.idx = r4ss::SSsummarize(retroModels,verbose = F)
+retro.len = ss3diags::SSretroComps(retroModels)
+```
+
+### Survey indeces
+
+The reference-case model fitted all indices moderately well, with runs tests indicating mixed evidence for a systematic residual pattern (Figure 10).
+
+```{r fig7, fig.height=8,fig.width=9, fig.cap = paste0("Fit, residual diagnostics and hindcast cross-validations for Survey Index")}
+sspar(mfrow=c(3,2),plot.cex = 0.7)
+for(i in 1:5){
+SSplotIndices(ref,subplots = 2,fleets=i+8)
+r=SSplotRunstest(ref,add=T,verbose = F,indexselect = i)
+}
+
+```
+
+\pagebreak
+
++ Figure 7 check conflict between indices and mean length. As the value are under 30%, no major conflicts were found
+
+```{r fig8, fig.height=8,fig.width=9, fig.cap = paste0("Joint residuals")}
+sspar(mfrow=c(1,2),plot.cex = 0.8)
+SSplotJABBAres(ss3rep,subplots="cpue",add=T,col=sscol(3)[c(1,3,2)])
+SSplotJABBAres(ss3rep,subplots="len",add=T,col=sscol(3)[c(1,3,2)])
+
+```
+
+### Size composition
+
++ The estimated selectivity curves are shown in Figure 11, with time-varying selectivity patterns for illustrated in Figure 12. 
+
++ The fits to the size composition data and conditional age-length-key appeared overall adequate and only showed evidence for non-random residual patterns in few instances. Sex ratio at length by the current reference case is also satysfying.
+
+```{r fig9, fig.height=6,fig.width=8, fig.cap = paste0("Estimated logistic selectivity curves by fleet")}
+
+sspar(mfrow=c(1,1),plot.cex = 0.8)
+SSplotSelex(ref,subplots = 1)
+
+```
+
+
+```{r include=FALSE, fig10, fig.height=7,fig.width=9, fig.cap = paste0("Plot illustrating the estimated time-varying changes in the selectivity curves for XXX")}
+sspar(mfrow=c(2,2),plot.cex = 0.7)
+SSplotSelex(ref,subplots = 3)
+```
+
+
+```{r fig11,warning=F, fig.height=10,fig.width=10, fig.cap = paste0("Summary of observed and expected composition data aggregated across years")}
+
+SSplotComps(ref,subplots=21)
+```
+
+
+```{r fig12, fig.height=7,fig.width=8, fig.cap = paste0("Residuals for mean lengths of size composition data from fishing fleets and surveys")}
+SSplotComps(ss3rep,subplots = 24)
+```
+
+
+```{r fig13, fig.height=7,fig.width=8, fig.cap = paste0("Run test for mean lengths of size composition data from fishing fleets and surveys")}
+sspar(mfrow=c(3,3),plot.cex = 0.5)
+for(i in 1:2){
+r= SSplotRunstest(ref,subplots ="len",add=T,indexselect = i,verbose=F)
+}
+```
+
+
+```{r fig14, fig.height=7,fig.width=8, fig.cap = paste0("Observed and predicted sex ratio by length")}
+SSplotSexRatio(ss3rep,kind="LEN")
+```
+
+\pagebreak
+
+### Restropective Analysis with Forecasting
+
++ The retrospective analysis showed a slightly retrospective pattern on $SSB$ from Mohn's Rho of -0.17, while the $F$ bias was -0.16. Forecast bias were the same as retrosective bias. All retrospective peels fell within the 95\% confidence intervals of the full model 
+
+```{r fig15, fig.height=7,fig.width=9, fig.cap = paste0("Retrospective analysis and retrospective forecasts for the 2024 base-case model")}
+sspar(mfrow=c(2,2),plot.cex = 0.65)
+r=SSplotRetro(retro.idx,add=T,legend=F,forecast=F,verbose = F)
+r=SSplotRetro(retro.idx,add=T,forecastrho = T,legend=F,
+            verbose = F,xlim=c(2005,2023))
+r=SSplotRetro(retro.idx,subplots = "F",add=T,legend=F,forecast=F,
+            verbose = F)
+r=SSplotRetro(retro.idx,subplots = "F",add=T,forecastrho = T,legend=F,
+            verbose = F,xlim=c(2005,2023))
+mtext(c("Retro","Forecast"),3,outer=T,line=-0.5,at=c(0.3,0.8),cex=0.8)
+
+```
+
+### Hindcast Cross-Validations
+
+Hindcast cross-validations indicated that the model has limited prediction skill for all indices. By contrast, both the indeces indicated prediction skill for mean lengths (Figure 19).
+
+```{r fig16, fig.height=8,fig.width=7, fig.cap = paste0("Fit and hindcast cross-validations for Survey size compositions of the base-case model")}
+sspar(mfrow=c(1,2),plot.cex = 0.5)
+SSplotHCxval(retro.len,subplots = "len",add=T,verbose = FALSE)
+
+```
+
+Hindcast with Cross-Validation of CPUE observations
+
+```{r fig17, fig.height=8,fig.width=7, fig.cap = paste0("Hindcast with Cross-Validation of CPUE observations")}
+sspar(mfrow=c(2,2),plot.cex = 0.9)
+SSplotHCxval(retroSummary,xmin=2006,add=T,legendcex = 0.6, Season=1)
+
+```
+
+
+\pagebreak
+
+### Profiling of steepness
+
+
+The reference case  was further evaluated through profiling it over a range of steepness values $h = 0.45-0.95$.
+
+Figure 22 shows that a lower range of $h = 0.45-0.65$ is supported by the total negative log-likelihood.
+
+The stock status estimates appear insensitive to alternative assumption about the steepness $h$ values under the value assumed for the reference case ($h = 0.80$) (Figure 22)
+
+```{r fig18, fig.height=8,fig.width=7, fig.cap = paste0("Negative log-likelihood profiles over a range of steepness values (h = 0.45-0.95)")}
+
+# summarize output
+profilesummary <- SSsummarize(profilemodels,verbose=F)
+results <- SSplotProfile(profilesummary, add_cutoff = TRUE, verbose=F,
+                         profile.string = "Ricker_beta",
+                         profile.label = "Stock-recruit steepness (h)")
+
+```
+
+
+```{r fig19, fig.height=9,fig.width=8, fig.cap = paste0("Comparison of stock trajectories with alternative stepness values (h = 0.45-0.95)")}
+
+h = c(seq(0.45,0.60,0.05),seq(0.7,0.95,0.05))
+
+mvns = Map(function(x,y){
+    SSdeltaMVLN(x,add=T,run =paste0("h=",y),Fref = "MSY",
+                catch.type = "Exp",years=1875:2023,
+                verbose = F,plot = F)},
+           x=profilemodels,y=h)
+
+sspar(mfrow=c(3,2),plot.cex = 0.7)
+SSplotEnsemble(mvns,
+               uncertainty =T,
+               add=T,
+               legendcex = 0.65,
+               legendloc = "topright",verbose = F)
+
+```
+
+
+\pagebreak
+
+# Assessment outcome
+
+## Reference Points
+
++ Reference points were estimated within the Stock Synthesis model, where the biomass reference points are considered as $SSB$ for females. Following the precautionary approach, target reference points of $B_{tgt} = SSB_{40}$ (biomass equal to 40 percent of unfished biomass $SBB_0$) and $F_{tgt}$ = $F_{SB40}$ (fishing mortality level at $SSB_{40}$) were proposed to serve a preliminary as proxies for $B_{MSY}$ and $F_{MSY}$. In the light of uncertainty about the underlying stock recruitment relationship, this choice of precautionary MSY proxies is likely to reduce the asymmetric risk of overfishing, while still attaining more than 95% of the theoretical MSY at FMSY and ensuring that about more 40\% more $SBB$ is left in the water to ensure both future recruitment and catch opportunities. However, as the ratio between $SSB_{MSY}$ and $SBB_0$ is similar to $SSB_{40}$, it was decided to use $SSB_{MSY}$ as biomass reference point and $F_{MSY}$ as target fishing mortality $F_{tgt}$. Moreover, the group proposed trigger ($B_{trigger}$) and limit ($B_{lim}$) biomass reference points. Accordingly, $B_{trigger}$ was set to $SSB_{MSY}$ and $B_{lim}$ to 50\% of $SSB_{MSY}$ ($B_{lim} = 0.50B_{tgt}$).
+
+
+```{r fig20, fig.height=5,fig.width=8, fig.cap = paste0("Equilibrium yield curves relative to fishing mortality and spawning stock biomass (SSB). The vertical lines indicate the location of the precautionary target reference points FSB35 and SSB35 relative to the theoretical FMSY and BMSY. The horizontal red dashed line denotes 95\\% of the theoretical maximum surplus production relative to MSY.")}
+
+sspar(mfrow=c(1,2),plot.cex = 0.7)
+SSplot_eqcurves(ref,Fref="MSY",msyline = 0.95)
+
+```
+
+##  Stock Status
+
+```{r}
+mvnbase= FLRef::ssmvln(ref, Fref="MSY",years=1875:2023,verbose=T)
+stk = ss2FLStockR(mvnbase)
+# Add Btrigger + Blim
+stk@refpts = rbind(stk@refpts,
+                FLPar(Btrigger=stk@refpts[[2]]*1,Blim=stk@refpts[[2]]*0.50)) 
+# with uncertainty
+stki = ss2FLStockR(mvnbase,output="iters") 
+stki@refpts = stk@refpts
+```
+
+
+```{r fig21, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Estimated stock status trajectories with associated reference points for the 2024 base-case scenario of European lobster in 3a")}
+
+plotAdvice(stki)
+
+```
+
+## Comparison with previous model (optional)
+
+```{r fig22, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Comparison between the estimated stock status trajectories from the new reference run and the last previous advice model update from 2023")}
+load("Reference_2023/Lobster_3a_Reference_2023.RData",verbose=T)
+bm = FLRef::ssmvln(ss3rep, Fref="MSY",verbose=F)
+stk.bm = ss2FLStockR(bm)
+
+plot(FLStocks(New2024=stk,Reference2023=stk.bm))+
+  facet_wrap(~qname,scales="free_y")+theme_bw()
+
+```
+
+```{r fig23, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Comparison between the relative stock status estimates from the new reference run and the last previous advice model update from 2023")}
+
+stks=FLStocks(
+New2024 = stock2ratios(stk),
+Reference2023 = stock2ratios(stk.bm)
+)
+stks[[1]]@refpts = stks[[1]]@refpts[1:2]
+stks[[2]]@refpts = stks[[2]]@refpts[1:2]
+plotAdvice(stks)
+
+```
+
+\pagebreak
+
+```{r}
+knitr::kable(FLRef::flr2stars(stk)$refpts,"pipe",
+      align ="lc",caption="Summary of estimated reference points 
+      for 2024 preliminary reference case model of European lobster in 3a")
+
+```
+
+Save
+
+```{r}
+out = FLRef::flr2stars(stki)$timeseries
+mles = FLRef::flr2stars(stk)
+
+# replace medians with mles (TODO: automise)
+out$Rec=mles$timeseries$Rec
+out$SSB=mles$timeseries$SSB
+out$Bratio=mles$timeseries$Bratio
+out$F=mles$timeseries$F
+out$Fratio=mles$timeseries$Fratio
+
+write.csv(out,file="Lobster3a.stars.csv",row.names = F)
+write.csv(mles$refpts,file="Lobster3a.refpts.stars.csv",row.names = F)
+
+```
+
+\pagebreak
+
+# F-based forecasting 
+
+$F_{apic}$ is used for good reason in forecasts in order to account for multi- fleet selectivity. Comparing the partial impacts selectivity pattern requires setting the instantaneous rate of fishing mortality $F$ at comparable constant levels. For this purpose, it is important to consider that the definition of selectivity differs across regions (e.g. $Fbar$ or exploitation rate). With regards to temporal compatibility of partial fleet selectivity effects, $F_{bar}$ has the undesirable property that its scale depends on the pre-specified age range across which $F_a$ is averaged. For example, if $F_{bar}$ is set to ages 1-4 to represent the dominant age classes under the current selectivity regime, but the goal is to evaluate the effect of selecting fish only at age-5, a common $F_{bar}$ would result in disproportionately high $F_a$ on ages 5+. This is because $F_{bar}$ is computed for age ranges that are hardly selected for the definition $S_a$ = $F_a$/$max(F_a)$. For this reason, it is more straight forward to use $F_{apical}$ as the standardized quantity $F$ quantify to account for partial impacts of fleet selectivity. 
+
+In the following, step-by-step guidelines are provided to setup an $F_{apic}$, so that it correctly corresponds to the $F_{bar}$ baseline for $F_{tgt}$ across multiple fleets and seasons.
+
+## Step 1: Basic setup
+
+In this a case, a folder with the reference model run is created and the model outputs are loaded with `r4ss::SS_output`
+
+Define name of reference model folder with the fitted ss3 model. Here you need to choose the model of the grid that is selected as best case
+
+```{r}
+model = "Run2"
+```
+
+Load reference model 
+
+```{r,eval=F}
+
+ss3rep = SS_output(model)
+
+```
+
+```{r,echo=F}
+load("rdata_runs/Lobster3a_Run2.Rdata")
+```
+
+Next a folder `forecast` is created 
+
+```{r}
+dir.create(paste0("forecast.",model),showWarnings = F)
+```
+
+A new helper function `SSnewrun` was added to `ss3diags` to easily create subfolders for the forecast scenarios. First a `Ftgt` reference folder is created for initial cross-checks 
+
+Specify subfolder path
+
+```{r}
+ftgtdir = file.path(paste0("forecast.",model),"Ftgt")
+```
+
+Create new F forecast model folder. Note that the data and control file and ss.exe names need to be specified if these diverge from the defaults `data.ss`, `control.ss` and `ss3.exe`
+
+```{r}
+dat = "Lobster_dat.dat"
+ctl = "Lobster_ctl.ss"
+par = "ss3.par"
+ss.exe = "ss3.exe"
+
+SSnewrun(model=model,dat=dat,ctl=ctl,par.file = "ss3.par", newdir=ftgtdir,ss.exe="ss3.exe")
+```
+
+Now the forecast file can be read be read with `r4ss`
+
+```{r}
+fc <- SS_readforecast(file.path(ftgtdir, "forecast.ss"),verbose = F)
+```
+
+## Step 2: Initial F exploitation calculations for Fapic forecast 
+
+Extract the `$exploitation` output from the report file
+
+```{r}
+Fexp = ss3rep$exploitation
+```
+
+Importantly, the `annual_F` are scaled to the F-basis (here $F_{bar}$), whereas fleet specific $F$ values are always given as $F_{apic}$
+
+Next compute the combined $F_{apic}$ generically across fleets
+
+```{r}
+Fexp$Fapic = apply(as.matrix(ss3rep$exploitation[,-c(1:6)]),1,sum,na.rm=T)
+```
+
+and aggregate across seasons, by taking the `mean` and not the `sum`.
+
+```{r}
+Fapic = aggregate(Fapic~Yr,Fexp,mean)
+```
+
+Next compute the corresponding annual $F_{bar}$ values from the `annual_F` 
+
+```{r}
+Fbar = aggregate(annual_F~Yr,Fexp,mean)
+```
+
+To work out exact ratio between $F_{apic}$ and $F_{bar}$ so that it is consistent with the benchmark calculations with ss3, it is necessary to extract the reference years for selectivity from the `forecast.ss` file. 
+
+The information required for the average selectivity conditions can be found in the `forecast.ss` file under `$Bmark_years`. The third and fourth position define the time horizon for the average selectivity across fleet, a value of -999 (here) indicates that the whole time series is use, but more commonly averages are taken, e.g. over the last 3 years, which can be specified as -2 0 or 2019 2021. The following code attempts to compute this generically.
+
+
+```{r}
+endyr = ss3rep$endyr
+if(fc$Bmark_years[3]< -90){
+  nfc = length(min(ss3rep$exploitation$Yr+1):endyr) # excluded init year
+} else { # if specified (e.g. -2, 0)
+  nfc = fc$Bmark_years[4]-fc$Bmark_years[3]+1 
+}
+
+# Benchmark reference years
+bmyrs = (endyr-nfc+1):endyr
+
+```
+
+```{r}
+Fratio = mean(Fapic$Fapic[Fapic$Yr%in%max(bmyrs)]/Fbar$annual_F[Fbar$Yr%in%max(bmyrs)])
+Fratio
+```
+
+`Fratio` defines the ratio of $F_{apic}$ to $F_{bar}$ for the reference period 
+
+Get the $F_{tgt}$ reference point, here defined as $F_{B_{40}}$. Therefore, the `annF_Btgt` is extracted.
+
+```{r}
+Fref = c("annF_Btgt","annF_MSY","annF_SPR")[1] 
+Ftgt = ss3rep$derived_quants$Value[ss3rep$derived_quants$Label==Fref]
+Ftgt.apic = Ftgt*Fratio
+Ftgt  # Fbar
+Ftgt.apic
+```
+
+## Setting up the manual F forecast input structure
+
+First, do some basic house keeping for the model structure
+
+```{r}
+nseas = length(unique(ss3rep$exploitation$Seas)) # number of seasons
+fleets = unique(ss3rep$fatage$Fleet) # fleets
+nfleets = length(fleets) # number of fleet
+```
+
+Next, the mean Fapic by fleet and season is calculated 
+
+```{r}
+# subset to benchmark years for selectivity
+fexp = ss3rep$exploitation[ss3rep$exploitation$Yr%in%bmyrs,] 
+fexp = cbind(fexp[,1:2],fexp[,-c(1:5)])[,-3] #><>  single fleet trick
+
+# flip
+fexp = reshape2::melt(fexp, id.vars = c("Yr", "Seas"),
+                      variable.name = "Fleet", 
+                      value.name = "Fapic")
+head(fexp)
+
+```
+
+The forecast file requires Fleet IDs not names. In the next step these are extracted and fleet names are converted in to Fleet IDs 
+
+```{r}
+fleet = data.frame(Fleet =ss3rep$FleetNames,ID=ss3rep$fleet_ID)
+fexp$Fleet= fleet[match(fexp$Fleet,fleet$Fleet),2]
+```
+
+Then, the relative proportions of $F_{apic}$ by fleet and season can be computed
+
+```{r}
+Fap = aggregate(Fapic~Seas+Fleet,fexp,mean)
+Fap$prop = Fap$Fapic/sum(Fap$Fapic)*nseas
+Fap
+```
+
+In the next step, status quo $F_{sq}$ for forecasting over the intermediate year(s) is defined. This can be relatively easily changed to intermediate catch years.  Here, the $F_{sq}$ of the average of the last 3 years is used as average, and the intermediate years are set to 2, account for 1 data lag year and an additional management lag year.
+
+
+```{r}
+# F status q
+nfsq = 3 
+nint = 2 
+```
+
+Compute the $F_{sq}$ as $F_{apic}$ vector by season and fleet 
+
+```{r}
+
+fsq = ss3rep$exploitation[ss3rep$exploitation$Yr%in%((endyr-nfsq+1):endyr),] 
+fsq = cbind(fsq[,1:2],fsq[,-c(1:5)])[,-3]  #><>  single fleet trick
+fsq = reshape2::melt(fsq, id.vars = c("Yr", "Seas"),
+                     variable.name = "Fleet", 
+                     value.name = "Fapic")
+Fsq = aggregate(Fapic~Seas+Fleet,fsq,mean)
+```
+
+Now, the forecast horizon can be defined in the loaded `starter.ss` object `fc`. Note that the forecast years muct match the same as in the forecast file of the reference run
+
+```{r}
+fc$Nforecastyrs = 10
+nfyrs = fc$Nforecastyrs
+fyrs= endyr+c(1:nfyrs) 
+```
+
+The F-vector that is passed on the forecast file comprises the season/fleet structure replicates for `ninit` for $F_{sq}$ and the forecast years under  $F_{tgt}$ that is scaled to $F_{apic}$ by the `Fratio` and partioned by season and fleets.
+
+```{r}
+fvec = c(rep(Fsq$Fapic,nint),rep(Ftgt*Fratio*Fap$prop,nfyrs-nint))
+```
+
+Given the fleet, season, intermediate year and forecast years structures, the forecast table for the `forecast.ss` file can finally be constructed.
+
+```{r}
+fc$ForeCatch = data.frame("Year"=rep(fyrs,each=nseas*nfleets),"Seas"=1:nseas,
+                          "Fleet"=rep(fleets,each=nseas),
+                          "Catch or F"=fvec,
+                          "Basis"=99)
+head(fc$ForeCatch,9)
+```                          
+
+Note that the `Basis` 99 specifies that $Fs$ are inputted (2 would be Catch).
+Finally, the forecast options need to be adjusted for manual input
+
+```{r}
+fc$eof=TRUE 
+fc$InputBasis = -1
+```
+
+and then the modified `starter.ss` file can be saved 
+
+```{r, eval=T, echo=F, warning=F,message=F}
+SS_writeforecast(fc, file =file.path(ftgtdir, "forecast.ss"),overwrite = T)
+```
+
+## Running Ftgt forecasts with checks
+
+In principle, the `Ftgt` can serve as a reference and the model does not have to be run if the goal is set up a number forecasts relative to $F_{tgt}$.
+
+However, for illustration, the `Ftgt` forecast is run to check that the $F_{apic}$ will produce $F_{bar}$ estimates that are consistent with $F_{tgt}$.
+
+To run
+
+```{r,echo=T, results="hide", warning=F,message=F}
+
+# Edit "starter.ss" 
+    starter.file <- readLines(file.path(ftgtdir, "starter.ss", sep=""))
+    linen <- NULL
+    linen <- grep("# 0=use init values in control file; 1=use ss.par", starter.file)
+    starter.file[linen] <- paste0("0 # 0=use init values in control file; 1=use ss.par") 
+    # tells it to use the estimate parameters
+    write(starter.file, paste(file.path(ftgtdir, "starter.ss", sep="")))
+r4ss::run(ftgtdir, skipfinished = T, show_in_console = F, exe="ss3.exe")
+
+```
+
+After the run is finished, the output can be loaded again.
+
+```{r, echo=T, results='hide', warning=F,message=F}
+ftgtrep = SS_output(ftgtdir)
+save(ftgtrep,file="rdata_forecast/ftgtref_Run2.rdata")
+
+```
+
+
+```{r}
+load("rdata_forecast/ftgtref_Run2.rdata")
+```
+
+For testing, `SSdeltaMVLN` is used to computed the trajectories with CIs, but this time the option `addprj=T` needs to be added to also include the forecast years
+
+```{r}
+ftgt.test =SSdeltaMVLN(ftgtrep,Fref="MSY", 
+                       run="Ftgt",addprj = T,plot=F,verbose=F)
+```
+
+
+```{r fig24, fig.height=10,fig.width=8, fig.cap = paste0("Stock trajectories with 95\\% CIs for basecase run and a $F_{tgt}$ forecast ")}
+
+sspar(mfrow=c(3,2),plot.cex = 0.8)
+  SSplotEnsemble(ftgt.test, add=T,verbose=F,legendloc = "topleft")
+```
+
+It can be readily seen that the $F_{apic}$ based $F_{tgt}$ forecast corresponds indeed to the $F_{tgt}$ estimate on $F_{bar}$ scale.  
+
+```{r,warning=F,message=F}
+library(FLRef)
+mvn = FLRef::ssmvln(ftgtrep,Fref="MSY",addprj = T,verbose=F)
+
+stkf = ss2FLStockR(mvn)
+rps = stkf@refpts
+stkf@refpts = rbind(rps,
+                    FLPar(Bpa=rps["Btgt"]*1,
+                          Blim=rps["Btgt"]*0.50))
+```
+
+
+```{r fig25, message=F,warning=F,fig.height=7.5,fig.width=8, fig.cap = paste0("Stock trajectories for basecase run and a $F_{tgt}$ forecast, relative to reference points")}
+
+plotAdvice(stkf)+geom_vline(xintercept = 2022.5,linetype=2)
+```
+
+```{r fig26, fig.height=4,fig.width=6, fig.cap = paste0("Stock trajectories with 95\\% CIs for basecase run and a $F_{tgt}$ forecast")}
+
+sspar(mfrow=c(1,1),plot.cex = 0.8)
+  SSplotEnsemble(ftgt.test, add=T,
+                 subplots="harvest",verbose=F,
+                 legendloc = "topleft",ylabs=expression(F/F[BMSY]))
+```
+
+\pagebreak
+
+## Looping through forecast scenarios
+
+Set up ratios relative to $F_{sq}$ in this case
+
+```{r}
+Ffrac = c(0.01,seq(0.6,1.1,0.1))
+```
+
+Specify forecast folders
+
+```{r}
+fcdirs = file.path(paste0("forecast.",model),paste0("Fsq",Ffrac))
+```
+
+Loop through the process of modifying the `forecast.ss` file iteratively. 
+The `Ffrac` is applied to apportioned $F_{tgt}$ vector.
+
+Create the forecast batch list
+
+```{r,eval=T}
+foreBatch <- list()
+
+for(i in 1:length(Ffrac)){
+  dir.tacN <- paste0(main.dir,"/forecast.Run2/","Fsq",Ffrac[i],"/")
+  
+  ##Create the forecast batch list
+  foreBatch <- c(foreBatch, as.list(dir.tacN))
+}
+
+library(parallel)
+library(doParallel)
+cl <- makeCluster(20, type="PSOCK")
+registerDoParallel(cl)
+
+```
+
+
+```{r,eval=T, results="hide", warning=F,message=F}
+for(i in 1:length(Ffrac)){
+  # create model folder
+  SSnewrun(model=ftgtdir,dat=dat,ctl=ctl, par.file = "ss3.par", newdir=fcdirs[i],ss.exe = "ss3.exe")
+  # Edit "starter.ss" 
+    starter.file <- readLines(file.path(fcdirs[i], "starter.ss", sep=""))
+    linen <- NULL
+    linen <- grep("# 0=use init values in control file; 1=use ss.par", starter.file)
+    starter.file[linen] <- paste0("1 # 0=use init values in control file; 1=use ss.par") 
+    # tells it to use the estimate parameters
+    write(starter.file, paste(file.path(fcdirs[i], "starter.ss", sep="")))
+  # Read Forecast file
+  fc <- SS_readforecast(file.path(fcdirs[i], "forecast.ss"))
+  # Apply Ffrac
+  # Create F forecast vector (generic)
+  # Change to Fsq
+  fvec = c(rep(Fsq$Fapic,nint),rep(Fsq$Fapic*Ffrac[i],nfyrs-nint))
+  # Create F forecast table in forecast.ss
+  fc$ForeCatch = data.frame("Year"=rep(fyrs,each=nseas*nfleets),"Seas"=1:nseas,
+                            "Fleet"=rep(fleets,each=nseas),
+                            "Catch or F"=fvec,
+                            "Basis"=99) 
+  SS_writeforecast(fc, file =file.path(fcdirs[i], "forecast.ss"),overwrite = T)
+}
+```
+
+```{r,eval=T, results="hide", warning=F,message=F}
+foreach(i=1:length(Ffrac), .packages="r4ss") %dopar% {
+cat("core:", i + 1, "\n")
+r4ss::run(foreBatch[[i]], skipfinished = F, show_in_console = FALSE, exe=ss.exe)
+#r4ss::run(fcdirs[i], extras = "-maxfn 0 -phase 50", skipfinished = F, show_in_console = TRUE, exe=ss.exe)
+
+}
+```  
+
+
+Load all runs in one go with `SSgetoutput`
+
+```{r, results="hide", warning=F,message=F}
+fcs = SSgetoutput(dirvec = c(fcdirs,ftgtdir))
+save(fcs,file="rdata_forecast/ftgtref_Run2.rdata")
+```
+
+```{r,echo=F}
+load("rdata_forecast/ftgtref_Run2.rdata")
+```
+
+Create list with outputs from `SSdeltaMVLN`
+
+
+```{r fig27, fig.height=10,fig.width=8, fig.cap = paste0("Kobe plot checks for the final forecast year")}
+
+sspar(mfrow=c(3,3),plot.cex = 0.8)
+
+fmvns = Map(function(x,y){
+  out = SSdeltaMVLN(x,Fref="MSY",verbose=F,run=y,addprj=T,plot=T)
+  mtext(y,outer = F,cex=0.8)
+  return(out)
+},x=fcs,y=as.list(c(paste0("Fsq",Ffrac),"Ftgt")))
+
+```
+
+Plot forecasts with `SSplotEnsemble`
+
+
+```{r fig28, fig.height=10,fig.width=8, fig.cap = paste0("Stock trajectories with 95\\% CIs for basecase run and forecast scanarios relative $F_{sq}$ and for $F_{tgt}$ ")}
+
+sspar(mfrow=c(3,2),plot.cex = 0.8)
+SSplotEnsemble(fmvns, add=T,verbose=F,legendloc = "topleft")
+
+```
+
+\pagebreak
+
+Convert to `FLR` format
+
+```{r}
+
+fstks = FLStocks(Map(function(x,y){
+  out = FLRef::ssmvln(x,Fref="MSY",verbose=F,run=y,addprj=T)
+  out = ss2FLStockR(out)
+  out@refpts =  stkf@refpts[-4] # Remove B0
+  return(out)
+},x=fcs,y=as.list(c(paste0("Fsq",Ffrac),"Ftgt"))))
+names(fstks) = c(paste0("Fsq",Ffrac),"Ftgt")
+
+```
+
+\pagebreak
+
+```{r fig29, fig.height=6.5,fig.width=9, warning=F,message=F, fig.cap = paste0("Trajectories for the basecase run and forecast scanarios relative $F_{sq}$ and for $F_{tgt}$ ")}
+
+plotAdvice(window(fstks,start=2013))+geom_vline(xintercept = c(2022,2024),linetype=28)
+
+```
+
+\pagebreak
+
+```{r}
+out =cbind(FLRef::fwd2stars(fstks,eval.yrs = 2026),
+           FLRef::fwd2stars(fstks,eval.yrs = 2026,rel=T)[,3:4])
+
+out[,2:3] = round(out[,2:3],1) 
+out[,4:6] =  round(out[,4:6],3)
+knitr::kable(out,"pipe",
+      align ="lccccc",caption="Summary of short-term forecast 
+      scenario results for 2026")
+
+```
+
+Save forecast table to STAR format
+
+```{r}
+write.csv(out,file="Lobster3a.fwd.stars.csv",row.names = F)
+
+```
+
+\pagebreak
+
+# Supplement: R code to run diagnostics and summary
+
+```{r,eval=FALSE}
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+#> Stock Synthesis reference model summary and diagnostic for Lobsters 3a
+#> @author Henning Winker (GFCM), modified by Max Cardinale (SLU)
+#> henning.winker@fao.org
+
+#><>><>><>><>><>><>
+# Load packages
+library("r4ss")
+library("ss3diags")
+
+# First set working directory to the R file location with ss3 subfolders
+
+# Define run name of folder
+run ="Run2"
+
+# Load the model run
+ss3rep = SS_output(run)
+
+# Plot the model run
+r4ss::SS_plots(ss3rep)
+
+# Save the r4ss object as rdata
+dir.create("rdata")
+save(ss3rep,file=file.path("rdata",paste0("Lobster3a_",run,".rdata")))
+
+# approximate uncertainty  and produce Kobe Plot
+sspar(mfrow=c(1,1))
+mvn = SSdeltaMVLN(ss3rep,Fref="MSY",run="ref",catch.type="Exp")
+
+# Plot trajectories with CIs
+sspar(mfrow=c(3,2))
+SSplotEnsemble(list(mvn),add=T)
+
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+### DO RETRO
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+start.retro <- 0 # end year of reference year
+end.retro <- 5 # number of years for retrospective e.g.,
+dirname.base = run
+model.run <- file.path(dirname.base)
+model.run
+
+### Step 3: DAT and CONTROL files
+DAT = "Lobster_dat.dat"
+CTL = "Lobster_ctl.ss"
+dir.retro = file.path(dirname.base, "Retrospective")
+dir.create(path = dir.retro, showWarnings = F)
+
+# Copy files
+file.copy(file.path(model.run, "starter.ss_new"), file.path(dir.retro, "starter.ss"))
+file.copy(file.path(model.run, "control.ss_new"), file.path(dir.retro, CTL))
+file.copy(file.path(model.run, DAT), file.path(dir.retro, DAT))
+file.copy(file.path(model.run, "forecast.ss"), file.path(dir.retro, "forecast.ss"))
+file.copy(file.path(model.run, "ss3.exe"), file.path(dir.retro, "ss3.exe"))
+
+# Automatically ignored for models without wtatage.ss
+file.copy(file.path(model.run, "wtatage.ss"), file.path(dir.retro, "wtatage.ss"))
+starter <- readLines(paste0(dir.retro, "/starter.ss"))
+
+# [8] '2 # run display detail (0,1,2)'
+linen <- grep("# run display detail", starter)
+starter[linen] <- paste0(1, " # run display detail (0,1,2)")
+
+# write modified starter.ss
+write(starter, file.path(dir.retro, "starter.ss"))
+
+### Step 6: Execute retrospective runs
+#r4ss::retro(dir = dir.retro, oldsubdir = "", newsubdir = "", years = start.retro:-end.retro)
+r4ss::retro(dir = dir.retro, oldsubdir = "", newsubdir = "", years = start.retro:-end.retro,verbose = T)
+
+retro <- r4ss::SSgetoutput(dirvec = file.path(dir.retro, paste0("retro", start.retro:-end.retro)))
+save(retro,file=paste0("retro_",run,".rdata"))
+
+# Reload
+load(file=paste0("retro_",run,".rdata"))
+retro.idx = r4ss::SSsummarize(retro)
+retro.len = ss3diags::SSretroComps(retro)
+
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+### Compile results summary
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+
+# Make output PDF
+pdf(paste0("Lobster3a_",run,".pdf"))
+sspar(mfrow=c(2,2),plot.cex = 0.7)
+SSplotBiology(ss3rep,mainTitle=F,subplots = c(1))
+SSplotBiology(ss3rep,mainTitle=F,subplots = c(21))
+SSplotBiology(ss3rep,mainTitle=F,subplots = c(6))
+SSplotBiology(ss3rep,mainTitle=F,subplots = c(9))
+
+sspar(mfrow=c(2,2),plot.cex = 0.7)
+SSplotBiology(ss3rep,mainTitle=F,subplots = c(4))
+
+# Recruitment
+sspar(mfrow=c(2,2),plot.cex = 0.7)
+SSplotRecdevs(ss3rep,subplots = 1)
+SSplotRecdevs(ss3rep,subplots = 2)
+SSplotSpawnrecruit(ss3rep,subplots = 1)
+SSplotSpawnrecruit(ss3rep,subplots = 3)
+
+par(mfrow=c(1,1))
+SSplotDynamicB0(ss3rep)
+
+sspar(mfrow=c(1,3),plot.cex = 0.7)
+SSplotIndices(ss3rep,subplots = 2)
+
+sspar(mfrow=c(1,1),plot.cex = 0.7)
+SSplotIndices(ss3rep,subplots =9)
+
+sspar(mfrow=c(2,3),plot.cex = 0.9)
+SSplotHCxval(retro.idx,xmin=2006,add=T,legendcex = 0.6, Season=1)
+SSplotHCxval(retro.len,add=T,subplots = "len",legendloc="topleft",indexUncertainty = TRUE,legendcex = 0.6)
+
+par(mfrow=c(1,1))
+SSplotSelex(ss3rep,subplots = 1)
+
+SSplotComps(ss3rep,subplots = 21)
+
+SSplotComps(ss3rep,subplots = 1)
+
+SSplotSexRatio(ss3rep,kind="LEN")
+
+# Bubble
+SSplotComps(ss3rep,subplots = 24)
+
+# ALK
+SSplotComps(ss3rep,kind= "cond",subplots = 3)
+
+# Runs Fleets
+sspar(mfrow=c(3,3),plot.cex = 0.5)
+SSplotRunstest(ss3rep,subplots ="len",add=T)
+
+# HC Fleets
+sspar(mfrow=c(3,2),plot.cex = 0.5)
+for(i in 1:2){
+  SSplotHCxval(retro.len,subplots ="len",add=T,legendloc = "topleft",indexselect = i)
+}
+
+# Retro
+sspar(mfrow=c(2,2),plot.cex = 0.65)
+SSplotRetro(retro.idx,add=T,legend=F,forecast=F)
+SSplotRetro(retro.idx,add=T,forecastrho = T,legend=F)
+SSplotRetro(retro.idx,subplots = "F",add=T,legend=F,forecast=F)
+SSplotRetro(retro.idx,subplots = "F",add=T,forecastrho = T,legend=F)
+mtext(c("Retro","Forecast"),3,outer=T,line=-0.5,at=c(0.3,0.8),cex=0.8)
+
+par(mfrow=c(1,1))
+SSplotYield(ss3rep,subplots = 2)
+
+sspar(mfrow=c(1,1))
+mvn = SSdeltaMVLN(ss3rep,Fref="MSY",catch.type = "Exp",run="ref")
+
+sspar(mfrow=c(3,2))
+SSplotEnsemble(list(mvn),add=T)
+
+dev.off()
+
+```
+
+
+```{r,eval=FALSE}
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+### PROFILING STEEPNESS
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+
+# Create subdirectory for profile runs
+dir.create(file.path(getwd(),run, "profile"))
+
+# specify directory
+dir_prof <- file.path(getwd(),run, "profile")
+
+# Copy/Paste ss3 files for running profiles
+copy_SS_inputs(
+  dir.old = file.path(getwd(),run),
+  dir.new = dir_prof,
+  copy_exe = TRUE,
+  create.dir = TRUE,
+  overwrite = TRUE,
+  copy_par = TRUE,
+  verbose = TRUE
+)
+
+# Manipulate starter file
+starter <- SS_readstarter(file.path(dir_prof, "starter.ss"))
+
+# change control file name in the starter file
+starter[["ctlfile"]] <- "control_modified.ss"
+
+# make sure the prior likelihood is calculated
+# for non-estimated quantities
+starter[["prior_like"]] <- 1
+
+# write modified starter file
+SS_writestarter(starter, dir = dir_prof, overwrite = TRUE)
+
+# define steepness range
+h.vec <- seq(0.45, 0.95, .05)
+
+# Specify dat and control files
+DAT = "Lobster_dat.dat"
+CTL = "Lobster_ctl.ss"
+Nprofile <- length(h.vec)
+
+# run profile command
+ncores <- parallelly::availableCores(omit = 1)
+future::plan(future::multisession, workers = ncores)
+profile <- r4ss::profile(
+  dir = dir_prof,
+  oldctlfile = paste(CTL),
+  newctlfile = "control_modified.ss",
+  string = "Ricker_beta", # subset of parameter label
+  exe = "ss3.exe",
+  profilevec = h.vec, skipfinished=T,
+)
+
+future::plan(future::sequential)
+
+# compile model runs (exclude 6 and 7 because the Hessian did not invert)
+profilemodels <- SSgetoutput(dirvec = dir_prof, keyvec = c(1:7,8:Nprofile))
+
+# Save as rdata
+save(profilemodels,file=paste0(dir_prof,"/profile_h.ref.rdata"))
+
+# summarize output
+profilesummary <- SSsummarize(profilemodels)
+
+# Make log-likelihood profile plot
+results <- SSplotProfile(profilesummary,
+                         profile.string = "Ricker_beta", 
+                         profile.label = "Stock-recruit steepness (h)"
+) 
+
+# check results
+results
+
+```
