@@ -5,7 +5,7 @@ Code and scripts for ICES stock synthesis benchmark models
 2.	Run script 2. Diags_Compare_refruns_Lobster3a example.Rmd for presenting and comparing the different models of the grid 
 3.	Run script 3. Lobster3a_basecase model example.Rmd for presenting the best case, includes code for steepness profiling at the end of the script
 4.	Script for the F Forecast options but with need to add also biomass options, same SSB as year before, Btrigger and Blim (Henning to be modified for ICES purposes)
-5.	Run script for running MSE to estimate reference points as from WKREFNEW reccomandations (example with 2 models, a best case and a robustness test; 3 scripts and an utilities.R script). The example is done with Southern seabass (Southern seabass example.zip), a lenght based model with SR as B-H for limited number of combinations of Ftarget and Btrigger. One running the final MSE, more combinations should be added. The MSE takes several hours on an ordinary pc, thus it is reccomended to run it over a cluster computer 
+5.	Run script 5 (MSE southern seabass example.zip) for running MSE to estimate reference points as from WKREFNEW reccomandations (example with 2 models, a best case and a robustness test; 3 scripts and an utilities.R script). The example is done with Southern seabass (Southern seabass example.zip), a lenght based model with SR as B-H for limited number of combinations of Ftarget and Btrigger. One running the final MSE, more combinations should be added. The MSE takes several hours on an ordinary pc, thus it is reccomended to run it over a cluster computer. First, create FLR stock object for MSE and MSE best case attibutes, then run the MSE using the rmd file
 
 Scripts for additional useful diagnostics
 
