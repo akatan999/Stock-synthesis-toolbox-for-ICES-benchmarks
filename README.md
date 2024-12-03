@@ -15,5 +15,5 @@ Scripts for additional useful diagnostics
 9.	Use fishlife for estimating life history priors (Fishlife.R)
 10.	Identify parameters that changes when running the retro (Retro_sensitivity.R)
 
-Lobster example.zip contains the basecase model and a copy of it as mock example. Run both models and then you can use directly in script 1 as example
+Lobster example.zip contains the basecase model and a copy of it as mock example. Run first both models and then you can use those directly in script 1 as an example
 
