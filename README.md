@@ -9,7 +9,7 @@ Code and scripts for ICES stock synthesis benchmark models
 
 Scripts for additional useful diagnostics
 
-6.	Script for profiling M and h at the same time (new from Laurie, I dont have it yet)
+6.	Script for profiling M and h at the same time (not ready yet)
 7.	Script for profiling M at age (M_at_age_profile.R)
 8.	Script for jittering (Jittering.R using NOAA wrapper); includes also wrappers for retrospective (already run for all models in script 1.) and profiling (also included in script 3)
 9.	Use fishlife for estimating life history priors (Fishlife.R)
