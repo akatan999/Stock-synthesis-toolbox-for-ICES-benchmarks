@@ -1,6 +1,12 @@
 # Stock-synthesis-toolbox-for-ICES-benchmarks
 Code and scripts for ICES stock synthesis benchmark models
 
+First, you need to install all necessary packages:
+
+Install packages for stock synthesis benchmark.Rmd
+
+Then you can follow the scheme below:
+
 1.	Run script 1. Ensemble_grid_Lobster3a_example.R for creating the models grid diagnostic table; it creates the diags table and some plots for the next script. Use Lobster example.zip as an example.
 2.	Run script 2. Diags_Compare_refruns_Lobster3a example.Rmd for presenting and comparing the different models of the grid 
 3.	Run script 3. Lobster3a_basecase model example.Rmd for presenting the best case, includes code for steepness profiling at the end of the script
