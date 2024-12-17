@@ -1,0 +1,237 @@
+---
+title: "Install packages for stock synthesis benchmark"
+
+author: 
+ - Henning Winker (GFCM - WGAs) 
+
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    keep_tex: false
+vignette: >
+  %\VignetteIndexEntry{FLRef Vignetted}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r wrap-hook, echo = FALSE,message=F,warning=F}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+
+```{r, echo = FALSE,message=F,warning=F}
+knitr::opts_chunk$set(collapse = TRUE, comment = "  " ,fig.align = 'center', cache=FALSE,tidy.opts=list(width.cutoff=60), tidy=TRUE)
+
+```
+
+# Installation guidelines
+
+## Install `FLR` packages 
+
+### Basic packages `FLCore` and `ggplotFL` 
+
+All `FLR` based packages are now available on r-universe (similar R cran), which means that for Windows users the packages are readily pre-compiled.
+
+It is recommended to first install and test the two basic `FLR` packages `FLCore` and `ggplot` before proceeding with "heavier machinery" 
+
+Before installing the packages clear your R environment
+
+```{r,eval=FALSE,message=F,warning=F}
+rm(list = ls())
+```
+
+and re-start R.
+
+```{r,eval = F}
+
+install.packages(c('FLCore', 'ggplotFL'), repo='https://flr.r-universe.dev')
+
+```
+
+Load packages
+
+```{r,warning=F,message=F}
+library(FLCore)
+library(ggplotFL)
+
+```
+
+## Install `FLBRP`, `FLFishery` `FLasher` 
+
++ `FLBRP` solving for reference points in `FLR`
+
++ `FLasher` forecasting (requires `FLFishery`)
+
+both packages use `C++` in the background. 
+
+Please ensure that `FLash` is not loaded before installing or using `FLasher`. There are many conflicts.
+Perhaps best to remove `FLash`.
+
+```{r,eval=F}
+install.packages(c('FLBRP','FLFishery','FLasher'), repo='https://flr.r-universe.dev')
+```
+
+Load packages
+
+```{r}
+library(FLBRP)
+library(FLasher)
+
+```
+
+## `FLSRTMB`, `mse` and `FLRef` 
+
++ `FLSRTMB` for stock-recruitment fitting in TMB
+
++ `mse` many additional utilities and prerequisite for `FLRef` 
+
++ `FLRef `for advanced reference point estimation and producing advice plots
+
+First, this needs some additional packages, first and foremost `devtools` and `TMB`
+
+Note that it is recommended to install `TMB` from `type =  source`, which will also be required for running `spict`. The installation of `TMB` required that `Rtools` is correctly installed (see above)!
+
+```{r, eval=F}
+install.packages("devtools")
+install.packages("TMB", type = "source")
+```
+
+Furthermore, best to install the `ggplot2` packages and reshape2
+
+```{r,eval=F}
+install.packages("ggplot2")
+install.packages("reshape2")
+
+```
+
+Load packages
+
+```{r,message=F,warning=F}
+library(TMB)
+library(ggplot2)
+library(reshape2)
+
+```
+
+Now install `FLSRTMB`
+
+```{r,eval=F}
+install.packages(c('FLSRTMB'), repo='https://flr.r-universe.dev')
+```
+
+Next install `mse`
+
+```{r,eval=F}
+install.packages(c('mse'), repo='https://flr.r-universe.dev')
+```
+
+Load packages
+
+```{r,message=F,warning=F}
+library(FLSRTMB)
+library(mse)
+
+```
+
+Install `FLRef`
+
+```{r,eval=F}
+install.packages(c('FLRef'), repo='https://flr.r-universe.dev')
+
+```
+
+Load package
+
+```{r,message=F,warning=F}
+library(FLRef)
+
+```
+
+\newpage 
+
+## Install packages for Stock Synthesis
+
+First in install `r4ss`, which is designed to load and evaluate ss3 models in R.
+It is recommended to install the latest version of `r4ss` directly from github.
+
+```{r, eval=FALSE}
+devtools::install_github("r4ss/r4ss")
+```
+
+In addition, it is suggest to install the `FLR` package `ss3om`, which is needed to produce the partial F plot by gear/fleet
+
+```{r,eval=F}
+install.packages(c('ss3om'), repo='https://flr.r-universe.dev')
+
+```
+
+### FishLife
+
+Let's install:
+
+[FishLife](https://github.com/James-Thorson-NOAA/FishLife), which helps us to retrieve life-history estimates. 
+
+Consider to update the [rfishbase](https://github.com/ropensci/rfishbase) version. During the process of installing the package you may be asked for. Please update it as needed. 
+
+```{r }
+
+#remotes::install_github("ropensci/rfishbase")
+library("rfishbase")
+
+```
+
+You might face issues installing this package. Please run the below code before installing FishLife
+ 
+```{r }
+
+options(download.file.method = "wininet") 
+ 
+```
+
+The final step is confirming the package is properly installed by calling it. 
+You should find the below loading information in your console
+
+############################################################################
+
+Loading package FishLife, developed by James Thorson for the National Marine Fisheries Service
+For details and citation guidance, please see http://github.com/James-Thorson-NOAA/FishLife/
+
+############################################################################
+
+You also can retrieve the _vignettes_ to access the predictive values by running FishLife.
+To retrieve the PDF please click in the ZIP folder and follow the path: **FishLife-3.1.0/vignettes/Access.pdf/**
+
+Please note that a number of papers describing models, databases, and applications for stock assessment may be found under several headlines [Description of package, Further reading, and Applications for stock assessment](https://github.com/James-Thorson-NOAA/FishLife). 
+
+
+```{r }
+
+#devtools::install_github("james-thorson/FishLife", dep=TRUE)
+library(FishLife)
+
+```
+
+### SPMpriors
+
+[SPMpriors](https://github.com/Henning-Winker/SPMpriors), which provide a toolbox for generating priors for stock assessments from FishLife. Accordingly, _SPMpriors_ should be installed after _FishLife_ was. 
+Note that the 'force' mode is being used in order to make sure _SPMpriors_ is installed and updated later than _FishLife_ is.  
+
+```{r }
+
+#devtools::install_github("henning-winker/SPMpriors",force = TRUE)
+library(SPMpriors)
+
+```
+
