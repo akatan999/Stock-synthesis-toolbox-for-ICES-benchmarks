@@ -21,5 +21,12 @@ Scripts for additional useful diagnostics
 9.	Use fishlife for estimating life history priors (Fishlife.R)
 10.	Identify parameters that changes when running the retro (Retro_sensitivity.R)
 
+Additional diagnostics
+
+11. NUTS MCMC.R will run MCMC both with RWM and NUTS algorithms for your best case model
+12. MCMC_plots.R is used for comparing MCMC and MLE models
+
+
+
 Lobster example.zip contains the basecase model and a copy of it as mock example. Run first both models and then you can use those directly in script 1 as an example
 
