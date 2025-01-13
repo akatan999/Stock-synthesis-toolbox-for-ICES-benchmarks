@@ -17,7 +17,7 @@ Scripts for additional diagnostics
 
 6.	Script for profiling M and steepness at the same time (not yet ready)
 7.	Script for profiling M at age (M_at_age_profile.R originally created by Iago Mosqueira)
-8.	Script for jittering (Jittering_profiling & retro.R using NOAA wrapper); includes also wrappers for retrospective (already run for all models in script 1) and profiling (also included in script 3)
+8.	Script for jittering (Jittering_profiling & retro.R using NOAA wrapper); includes also wrappers for retrospective (which is also run for all models using script 1) and profiling (also included at the end of script 3)
 9.	Use fishlife for estimating life history priors (Fishlife.R)
 10.	Identify parameters that changes most when running the retro (Retro_sensitivity.R; originally created by Hans Gerritsen))
 
