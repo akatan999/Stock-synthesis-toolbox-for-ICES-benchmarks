@@ -13,7 +13,7 @@ Then you can follow the scheme below:
 4.	Script for the F Forecast options but with need to add also biomass options, same SSB as year before, Btrigger and Blim (Henning to be modified for ICES purposes, not yet ready)
 5.	Series of scripts for estimating reference points (MSE southern seabass example.zip) running a MSE as from WKREFNEW recommendations (example with 2 models, a best case and a mock robustness test; 3 scripts and an utilities.R script). The example is done with Southern seabass (Southern seabass example.zip), a lenght based model with SR as B-H for limited number of combinations of Ftarget and Btrigger. First, estimate Blim (set to 15% B0 in the example), then create the FLR stock object for MSE and MSE best cases attibutes, finally run the MSE using the rmd file. When running the final MSE, more combinations should be added. The MSE takes several hours on an ordinary pc, thus it is recommended to run it over a cluster computer (originally created by Iago Mosqueira). 
 
-Scripts for additional diagnostics
+Scripts for additional diagnostics: 
 
 6.	Script for profiling M and steepness at the same time (not yet ready)
 7.	Script for profiling M at age (M_at_age_profile.R originally created by Iago Mosqueira)
@@ -21,10 +21,11 @@ Scripts for additional diagnostics
 9.	Use fishlife for estimating life history priors (Fishlife.R)
 10.	Identify parameters that changes most when running the retro (Retro_sensitivity.R; originally created by Hans Gerritsen))
 
-More additional diagnostics
+More additional diagnostics: <br>
 
-11. NUTS MCMC.R run MCMC both with RWM and NUTS algorithms for your best case model (originally created by Cole Monnahan)
-12. MCMC_plots.R is used for comparing MCMC and MLE models
+11.  R script  (anf.27.3a4_ss3diags_simple.R)[] to run basic diagnostics with ss3diags for anf.27.3a4 with output (pdf)[]
+12.  NUTS MCMC.R run MCMC both with RWM and NUTS algorithms for your best case model (originally created by Cole Monnahan)
+13.  MCMC_plots.R is used for comparing MCMC and MLE models
 
 
 
