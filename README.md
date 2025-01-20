@@ -22,7 +22,7 @@ Scripts for additional diagnostics
 10.	Identify parameters that changes most when running the retro (Retro_sensitivity.R; originally created by Hans Gerritsen))
 
 More additional diagnostics
-
+10. R script  (anf.27.3a4_ss3diags_simple.R)[] to run basic diagnostics with ss3diags for anf.27.3a4 with output (pdf)[]
 11. NUTS MCMC.R run MCMC both with RWM and NUTS algorithms for your best case model (originally created by Cole Monnahan)
 12. MCMC_plots.R is used for comparing MCMC and MLE models
 
