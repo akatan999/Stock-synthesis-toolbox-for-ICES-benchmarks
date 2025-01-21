@@ -1,6 +1,8 @@
 # Stock-synthesis-toolbox-for-ICES-benchmarks
 Code and scripts for ICES stock synthesis benchmark models
 
+Here we collate a series of scripts and code provided by different authors and used in several ICES workshops and other fora to conduct a full benchmark. 
+
 First, you need to install all necessary packages:
 
 For this, you should use Install packages for stock synthesis benchmark.Rmd (originally created by Henning Winker)
