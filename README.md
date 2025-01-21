@@ -29,7 +29,8 @@ More additional diagnostics: <br>
 12.  NUTS MCMC.R run MCMC both with RWM and NUTS algorithms for your best case model (originally created by Cole Monnahan)
 13.  MCMC_plots.R is used for comparing MCMC and MLE models
 
-
-
 Lobster example.zip contains the basecase model and a copy of it as mock example. Run first both models and then you can use those directly in script 1 as an example
+
+For estimating sample size of the survey length and age distribution, we recommend using the method described by the Stewart et al., 2014 paper, where you simply need to multiply the number of fish measured times the 2.74 value (general value for all species) described in the paper. For the commercial fisheries sample size of length and age distribution, you need to apply the formula described in the word file (fishery input sample sizes) and included as an example in the excel file (inputN fisheries formula). All necessary documents are embedded in the zip file Sample size.zip.
+
 
