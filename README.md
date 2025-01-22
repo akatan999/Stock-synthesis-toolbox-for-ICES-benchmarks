@@ -25,7 +25,7 @@ Scripts for additional diagnostics:
 
 More additional diagnostics: <br>
 
-11.  R script  [anf.27.3a4_ss3diags_simple.R](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/11.anf.27.3a4_ss3diags_simple.R) to run basic diagnostics with ss3diags for [anf.27.3a4](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/anf.27.3a4.zip) with output [pdf](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/anf.27.3a4_ref.pdf)
+11.  R script  [anf.27.3a4_ss3diags_simple.R](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/Script/anf.27.3a4_ss3diags_simple.R) to run basic diagnostics with ss3diags for [anf.27.3a4](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/Data/anf.27.3a4.zip) with output [pdf](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/Pdf/anf.27.3a4_ref.pdf)
 12.  NUTS MCMC.R run MCMC both with RWM and NUTS algorithms for your best case model (originally created by Cole Monnahan)
 13.  MCMC_plots.R is used for comparing MCMC and MLE models
 
