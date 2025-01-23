@@ -1,0 +1,967 @@
+---
+title: "SS3: User Guide: ICES fishing opportunites"
+
+author: 
+ - Henning Winker (GFCM - ICES WKBSS3) 
+
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    keep_tex: false
+vignette: >
+  %\VignetteIndexEntry{FLRef Vignetted}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r wrap-hook, echo = FALSE,message=F,warning=F}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+
+```{r, echo = FALSE,message=F,warning=F}
+knitr::opts_chunk$set(collapse = TRUE, comment = "  " ,fig.align = 'center', cache=FALSE,tidy.opts=list(width.cutoff=60), tidy=TRUE)
+
+```
+
+
+
+
+Load `r4ss`, `FLRef` and `ss3om`
+
+```{r,warning=F,message=F}
+
+library(r4ss)
+library(FLRef)
+library(ss3om)
+library(ss3diags)
+
+```
+
+# SS3 assessment summary for anf.27.3a4
+
+
+## Step 1: Set up file paths and folders structure for loading and saving the SS3 model
+
+Set up the file path to the folder where the SS3 model folder with run is located.
+
+
+Define name of reference model folder with the SS3 model outputs
+
+```{r}
+model = "ref"
+```
+
+
+
+Create `.rds` stock  file name 
+
+```{r}
+
+stock.file = paste0("anf.27.3a4_",model,".rds")
+```
+
+Load reference model 
+
+```{r,eval=F}
+
+ss3rep = SS_output(file.path(model))
+
+```
+
+Create an `rdata` folder in the assessment model subdirectory.
+
+```{r}
+rdata = file.path("rdata")
+dir.create(rdata,showWarnings = FALSE)
+
+```
+
+Save the model as `rdata` file
+
+```{r,eval=F}
+saveRDS(ss3rep,file= file.path("rdata",stock.file))
+
+```
+
+...or load directly as `.rdata` if these had been saved already
+
+```{r,echo=T}
+ss3rep = readRDS(file.path(rdata,stock.file))
+```
+
+## Specify benchmarks
+
+```{r}
+Fmsy =	0.137
+Fpa	 = 0.215
+Fupper =	0.174
+Flower =	0.105
+Fp0.5	= 0.215
+Btrigger =	38604
+Blim	= 25686
+Bpa	= 35692
+TAC = 11293  # 2023
+  
+```
+
+Make `data.frame` that is compatible with `FLPar` in `FLR` 
+
+```{r}
+benchmarks = data.frame(params=c("Fmsy","Fpa","Fupper","Flower","Fp0.5","Btrigger","Blim","Bpa"), data=c(Fmsy,Fpa,Fupper,Flower,Fp0.5,Btrigger,Blim,Bpa))
+```
+
+Convert to `FLPar` 
+
+```{r}
+bms = as(benchmarks,"FLPar")
+bms
+```
+
+## Step 2: Convert SS3 to `FLStockR`
+
+First, the `ssmvln()` from `FLRef` is used to generate the stock trajectories with uncertainty using a Monte-Carlo to generate a large number of iterations from multivariate log-normal approximation of the variance-covariance estimates.
+
+
+For the conventional ICES advice, it is important to extend the assessment horizon to the reference year+1 to plot $SSB$ and recruitment one-step-ahead ($y+1$) of $F$ and $Catch$.
+
+```{r}
+years = ss3rep$startyr:(ss3rep$endyr+1)
+
+mvn = FLRef::ssmvln(ss3rep, Fref="Btgt",verbose=F,years=years)
+```
+
+ The option `Fref=Btgt`, and not `Fref=MSY` is chosen because the reference points were based on $B_{tgt} = B_{40}$, with a corresponding $F_{tgt}=F_{40}$.
+
+This can be checked by
+
+```{r}
+
+mvn$Btgtref
+```
+
+Next the `mvn` object can easily converted into the `FLStockR` object
+
+```{r}
+stk = ss2FLStockR(mvn)
+```
+
+
+By default, the reference points for $F_{tgt}$ and $B_{tgt}$ are extracted together with `MSY`, `B0` and `R0`.
+
+```{r}
+stk@refpts
+
+```
+
+However, for the final advice plot only the agreed benchmarks should be shown.
+This can be done by specifying `stk@refpts` as the `FLPar` object `bms` 
+
+Here, the reference points $F_MSY$, $F_{pa}=F_{p0.5}$, $MSY B_{trigger}$ ($B_{trigger}$),$B_{pa}$ and $B_{lim}$ are selected for plotting    
+
+```{r}
+stk@refpts = bms[c("Fmsy","Fpa","Btrigger","Bpa","Blim")]
+```
+
+The option `osa=TRUE` allows to plot the one-step-ahead forecast for $SSB$ and recruitment through 2023, while omitting 2023 for $F$ and Catch.
+
+
+```{r, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Comparison of estimated stock status trajectories.")}
+plotAdvice(stk,osa=T)
+```
+
+Next make a `FLStockR` with iterations generated MVLN Monte-Carlo (default nsim = 1000) to depict uncertainty
+
+```{r}
+# with uncertainty
+stki = ss2FLStockR(mvn,output="iters",thin=1) 
+# assign benchmark reference points
+stki@refpts = stk@refpts
+```
+
+Check
+
+```{r, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Uncertainty of estimated stock status trajectories with associated reference points, with solid line depicting the median")}
+plotAdvice(stki,osa=TRUE)
+```
+
+## Step 3: Make Advice plot of stock status indicators with uncertainty
+
+The final advice plot seeks to provide a standard format for presenting stock status indicators that shows the exact maximum likelihood estimates from the model (`stk`) and depicts the uncertainty around those from the Monte-Carlo approach (stki).
+
+The plotting code allows to specify the years shown along the x-axis by adjusting the option  `break=c(seq(years[1],tail(years,1),5),tail(years,1))` depending on the length of the time series (here every 5 years and the last year)
+
+```{r, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Estimated stock status trajectories with associated reference points for the 2024 benchmark update of European hake in GSAs 17-18")}
+# Name plot padv
+padv = plotAdvice(FLStocks(CIs=stki,Fit=stk),osa=TRUE)+
+   scale_fill_manual(values = c("salmon","black"))+
+  scale_color_manual(values = c(0,"black"))+
+  theme(legend.position = "none")+
+  scale_x_continuous(breaks=c(seq(years[1]+1,tail(years,1),5),tail(years,1)))+ 
+  theme(axis.text.x = element_text(size=8, angle=90,vjust=0.5))
+padv
+```
+
+### Save `FLStockR` objects in `.rds` format to `rdata`
+
+It is adviced to specify additional information in the `FLStockR` object before saving it.
+
+Label the `FLStockR` object properly
+
+
+```{r}
+stk2 = stk
+stk2@name = "anf.27.3a4"
+stk2@desc = "2023, SS3, WKBSS3"
+```
+
+
+Note that `stk@name` will be used through this script to label file names! 
+
+
+
+```{r}
+saveRDS(stk2,file=file.path(rdata,paste0(stk2@name,"_stk2.rds")))
+saveRDS(stki,file=file.path(rdata,paste0(stk2@name,"_stki.rds")))
+ 
+```
+
+
+## Step 5: Generate output trajectories for the ICES advice template   
+
+First a folder `òutput`  is created to save the outputs (Tables, Figures).
+
+```{r}
+output.dir = file.path("output")
+dir.create(output.dir,showWarnings = FALSE)
+```
+
+
+
+The output from `ssmvln` can now be directly converted in the ICES time series compatible format from SS3 model by
+
+```{r}
+icests = ss2ices(mvn)
+
+```
+
+```{r}
+knitr::kable(icests,"pipe",
+      align ="lccccc",
+      caption=" Assessment summary. High and Low refer to 95% confidence intervals.")
+
+```
+
+
+
+The `timeseries`  can be saved as `.csv` files 
+
+```{r}
+write.csv(icests,file=file.path(output.dir,paste0(stk2@name,"_ts.csv")),row.names = F)
+```
+
+
+\newpage
+
+# F-based forecasts with SS3 and FLR
+
+
+This section introduces F-based forecasting with SS3 for multi-fleet models (also works for single fleets and seasonal models), which is based on the so-called apic F values ($F_{apic}$), whereas the choice of the reference $F$-basis and the associated reference points may differ from the $F_{apic}$ scale. For instance, GFCM and ICES, $F_{bar}$ (option 5) is the default option. It is therefore necessary to rescale $F$-basis to $F_{apic}$ for generating forecasts that are consistent with, e.g., $F_{tgt}$ or $F_{cur}$.     
+
+
+$F_{apic}$ is used for good reason in forecasts in order to account for multi- fleet selectivity. Comparing the partial impacts selectivity pattern requires setting the instantaneous rate of fishing mortaly $F$ at comparable constant levels. For this purpose, it is important to consider that the definition of selectivity differs across regions (e.g. $Fbar$ or exploitation rate). With regards to temporal compatibility of partial fleet selectivity effects, $F_{bar}$ has the undesirable property that its scale depends on the pre-specified age range across which $F_a$ is averaged. For example, if $F_{bar}$ is set to ages 2-4 to represent the dominant age classes under the current selectivity regime, but the goal is to evaluate the effect of selecting fish only at age-5, a common $F_{bar}$ would result in disproportionately high $F_a$ on ages 5+. This is because $F_{bar}$ is computed for age ranges that are hardly selected for the definition $S_a$ = $F_a$/$max(F_a)$. For this reason, it is more straight forward to use $F_{apical}$ as the standardized quantity $F$ quantify to account for partial impacts of fleet selectivity. 
+
+In the following, step-by-step guidelines are provided to setup an $F_{apic}$, so that it correctly corresponds to the $F_{bar}$ baseline for $F_{tgt}$ across multiple fleets and seasons.
+
+## Step 1: Basic setup
+
+In this a case, a folder with the reference model run is created and the model outputs are loaded with `r4ss::SS_output`
+
+next set up the folder where the SS3 model folder with run is located
+
+
+Load the assessment model
+
+
+```{r}
+ss3rep=readRDS(file.path("rdata",stock.file))
+```
+
+
+
+To organise the forecast outputs, first create a subfolder `forecast`
+
+```{r}
+forecast.dir = file.path(model,"forecast")
+
+dir.create(forecast.dir,showWarnings = F)
+```
+
+
+A new helper function `SSnewrun` was added to `ss3diags` to easily create subfolders for the forecast scenarios. First a `Fmsy` reference folder is created
+
+
+To this specify a new subfolder path, where to run the forecast for a "fixed" $F_{MSY}$ scenarios
+
+```{r}
+fmsydir = file.path(forecast.dir,"Fmsy")
+
+```
+
+Create new F forecast model folder. Note that the data and control file and ss.exe names need to be specified if these diverge from the defaults `data.ss`, `control.ss` and `ss3.exe`
+
+```{r}
+dat = "ang_dat.ss"
+ctl = "ang_ctl.ss"
+ss.exe = "ss3.exe"
+
+SSnewrun(model=file.path(model),dat=dat,ctl=ctl,newdir=fmsydir,ss.exe="ss3.exe")
+```
+
+Now the forecast file can be read be read with `r4ss`
+
+```{r}
+fc <- SS_readforecast(file.path(fmsydir, "forecast.ss"),verbose = F)
+```
+
+## Step 2: Initial F exploitation calculations for Fapic forecast 
+
+Extract the `$exploitation` output from the report file
+
+```{r}
+Fexp = ss3rep$exploitation
+```
+
+Importantly, the `annual_F` are scaled to the F-basis (here $F_{bar}$), whereas fleet specific $F$ values are always given as $F_{apic}$
+
+Next compute the combined $F_{apic}$ generically across fleets
+
+```{r}
+Fexp$Fapic = apply(as.matrix(ss3rep$exploitation[,-c(1:6)]),1,sum,na.rm=T)
+```
+
+and aggregate across seasons, by taking the `mean` and not the `sum`.
+
+```{r}
+Fapic = aggregate(Fapic~Yr,Fexp,mean)
+```
+
+Next compute the corresponding annual $F_{bar}$ values from the `annual_F` 
+
+```{r}
+Fbar = aggregate(annual_F~Yr,Fexp,mean)
+```
+
+To work out exact ratio between $F_{apic}$ and $F_{bar}$ so that it is consistent with the benchmark calculations with ss3, it is necessary to extract the reference years for selectivity from the `forecast.ss` file. 
+
+The information required for the average selectivity conditions can be found in the `forecast.ss` file under `$Bmark_years`. The third and fourth position define the time horizon for the average selectivity across fleet, a value of -999 (here) indicates that the whole time series is use, but more commonly averages are taken, e.g. over the last 3 years, which can be specified as -2 0 or 2020 2022. The following code attempts to compute this generically.
+
+
+```{r}
+endyr = ss3rep$endyr
+if(fc$Bmark_years[3]< -90){
+  nfc = length(min(ss3rep$exploitation$Yr+1):endyr) # excluded init year
+} else { # if specified (e.g. -2, 0)
+  nfc = fc$Bmark_years[4]-fc$Bmark_years[3]+1 
+}
+# Benchmark reference years
+bmyrs = (endyr-nfc+1):endyr
+bmyrs
+```
+
+NOTE: Other than here, it recommended to set the Bmark_years in the `forecast.ss` so that all quantities represent the mean last 3 years (i.e. -2).
+The advantage is that this allows using be consistent with the default FLR settings. 
+
+```{r}
+Fratio = mean(Fapic$Fapic[Fapic$Yr%in%max(bmyrs)]/Fbar$annual_F[Fbar$Yr%in%max(bmyrs)])
+Fratio
+```
+`Fratio` defines the ratio of $F_{apic}$ to $F_{bar}$ for the reference period 
+
+
+Set $F_{MSY}$ to benchmark
+
+```{r}
+Fmsy = bms["Fmsy"][[1]]
+```
+
+This value is given as $F_{bar}$ and therefore needs to be transformed to $F_{apic}$
+
+```{r}
+Fmsy.apic = Fmsy*Fratio
+Fmsy  # Fbar
+Fmsy.apic
+```
+## Step 3:  Setting up the manual F forecast input structure
+
+First, do some basic house keeping for the model structure. This is designed to work generically for any multi-fleet or seasonal structure
+
+```{r}
+nseas = length(unique(ss3rep$exploitation$Seas)) # number of seasons
+fleets = unique(ss3rep$fatage$Fleet) # fleets
+nfleets = length(fleets) # number of fleet
+```
+
+Next, the mean Fapic by fleet and season is calculated 
+
+```{r}
+# subset to benchmark years for selectivity
+fexp = ss3rep$exploitation[ss3rep$exploitation$Yr%in%bmyrs,] 
+fexp = cbind(fexp[,1:2],fexp[,-c(1:5)])[,-3] #><>  single fleet trick
+# flip
+fexp = reshape2::melt(fexp, id.vars = c("Yr", "Seas"),
+                      variable.name = "Fleet", 
+                      value.name = "Fapic")
+tail(fexp)
+```
+The forecast file requires Fleet IDs not names. In the next step these are extracted and fleet names are converted in to Fleet IDs 
+
+```{r}
+fleet = data.frame(Fleet =ss3rep$FleetNames,ID=ss3rep$fleet_ID)
+fexp$Fleet= fleet[match(fexp$Fleet,fleet$Fleet),2]
+```
+
+\pagebreak
+
+Then, the relative proportions of $F_{apic}$ by fleet and season can be computed
+
+```{r}
+Fap = aggregate(Fapic~Seas+Fleet,fexp,mean)
+Fap$prop = Fap$Fapic/sum(Fap$Fapic)*nseas
+Fap
+```
+
+In the next step, status quo $F_{sq}$ for forecasting over the intermediate year(s) is defined. This can be relatively easily changed to intermediate catch years.  Here, the $F_{sq}$ is taken as $F_{2022}$ to account for the systematically decreasing trend, and the intermediate years are set to 1, account for 1 data lag year.
+
+
+```{r}
+# F status q
+nfsq = 1
+nint = 1
+```
+
+Compute the $F_{sq}$ as $F_{apic}$ vector by season and fleet 
+
+```{r}
+
+fsq = ss3rep$exploitation[ss3rep$exploitation$Yr%in%((endyr-nfsq+1):endyr),] 
+fsq = cbind(fsq[,1:2],fsq[,-c(1:5)])[,-3]  #><>  single fleet trick
+fsq = reshape2::melt(fsq, id.vars = c("Yr", "Seas"),
+                     variable.name = "Fleet", 
+                     value.name = "Fapic")
+Fsq = aggregate(Fapic~Seas+Fleet,fsq,mean)
+```
+
+Now, the forecast horizon can be defined in the loaded `starter.ss` object `fc`.  Summary statistics on catch opportunities require a three year forecast horizon:
+
+(1) Intermediate year based on $F_{sq}$ or $TAC$
+(2) Implementation year with catch and $F$ outcomes
+(3) One-step-ahead forecast of the $SSB$ response and recruitment, when spawning is set to 1st of January (default)
+
+```{r}
+fc$Nforecastyrs = 3
+nfyrs = fc$Nforecastyrs
+fyrs= endyr+c(1:nfyrs) 
+```
+
+The F-vector that is passed on the forecast file comprises the season/fleet structure replicates for `ninit` for $F_{sq}$ and the forecast years under  $F_{tgt}$ that is scaled to $F_{apic}$ by the `Fratio` and portioned by fleets.
+
+```{r}
+fvec = c(rep(Fsq$Fapic,nint),rep(Fmsy*Fratio*Fap$prop,nfyrs-nint))
+```
+
+\pagebreak
+
+Given the fleet, season, intermediate year and forecast years structures, the forecast table for the `forecast.ss` file can finally be constructed.
+
+```{r}
+fc$ForeCatch = data.frame("Year"=rep(fyrs,each=nseas*nfleets),"Seas"=1:nseas,
+                          "Fleet"=rep(fleets,each=nseas),
+                          "catch_or_F"=fvec,
+                          "Basis"=99)
+tail(fc$ForeCatch,9)
+```                          
+Note that the `Basis` 99 specifies that $Fs$ are inputted, including $F_{sq}$ for the intermediate year.
+
+However, it also possible to input the $TAC$ for the intermediate year. In cases of multi-fleet models it is advice to apportion the $TAC$ for each fleet based on the most recent catch proportions by fleet (e.g. last years). The catch proportions can be computed from the information in
+
+```{r}
+ss3rep$catch[ss3rep$catch$Yr%in%tail(years,4),]
+```
+
+In this case there is only one fleet so the $TAC$ can be assigned directly to 2024 by declaring the `Basis` as 2 for catch
+
+
+First, the relative proportions of $Catches$ by fleet and season is computed
+
+```{r}
+Cexp = ss3rep$catch[ss3rep$catch$Yr%in%bmyrs,] 
+```
+
+```{r}
+Cap = aggregate(Exp~Seas+Fleet,Cexp,mean)
+Cap$prop = Cap$Exp/sum(Cap$Exp)*nseas
+Cap
+```
+
+```{r}
+fc$ForeCatch[fc$ForeCatch$Year==2023,"catch_or_F"] = TAC*Cap$prop 
+fc$ForeCatch[fc$ForeCatch$Year==2023,"Basis"] = 2
+fc$ForeCatch
+```
+Finally, the forecast options need to be adjusted for manual input
+
+```{r}
+fc$eof=TRUE 
+fc$InputBasis = -1
+```
+
+and then the modified `starter.ss` file can be saved 
+
+```{r,message=FALSE,warning=F}
+SS_writeforecast(fc, file =file.path(fmsydir, "forecast.ss"),overwrite = T,verbose = F)
+```
+
+## Step 4: Running Fmsy forecasts with checks
+
+In principle, the `Ftgt` can serve as a reference and the model does not have to be run if the goal is set up a number forecasts relative to $F_{tgt}$.
+
+However, for illustration, the `Ftgt` forecast is run to check that the $F_{apic}$ will produce $F_{bar}$ estimates that are consistent with $F_{tgt}$.
+
+To run
+
+```{r,eval=F}
+r4ss::run(fmsydir, skipfinished = F, show_in_console = T, exe=ss.exe)
+```
+
+After the run is finished (here under 2.5 min) the output can be loaded again.
+
+```{r,eval=F}
+fmsyrep = SS_output(fmsydir)
+# safe as rdata
+save(fmsyrep,file=file.path(rdata,"fwd_fmsy.rdata"))
+
+```
+
+```{r,echo=F}
+load(file.path(rdata,"fwd_fmsy.rdata"))
+```
+
+
+For a quick check the `plotAdvice()` from `FLRef` can be used, but first the forecast needs to be converted into a "simplified" `FLStock` object, using the function `ssmvln`. 
+
+Switch `addprj=TRUE` on to add the forecast horizon.
+
+```{r,warning=FALSE}
+
+mvn = FLRef::ssmvln(fmsyrep,Fref="Btgt",addprj = T,verbose=F)
+stkf = ss2FLStockR(mvn)
+```
+
+Again, assign benchmarks
+
+```{r}
+stkf@refpts=stk@refpts
+
+```
+
+It can be readily seen that the $F_{apic}$ based $F_{MSY}$ forecast corresponds indeed to the $F_{MSY}$ estimate on $F_{bar}$ scale.  
+
+
+```{r p5a, message=F,warning=F,fig.height=6.5,fig.width=8, fig.cap = paste0("Stock trajectories for basecase run and a $F_{tgt}$ forecast, relative to reference points")}
+
+plotAdvice(window(stkf,start=1991),osa=T)+geom_vline(xintercept = 2022.5,linetype=2)
+```
+
+
+
+\pagebreak
+
+## Step 5: Looping through fixed forecast scenarios
+
+Set up the F-based forecasts for $F=0$, $F_{pa}=F_{p0.5}$, $FMSY_{low}$, $FMSY_{high}$
+
+```{r}
+Fs = c("Fsq","F0","Fpa","Flower","Fupper")
+```
+
+Add Fadv according ICES MSY approach of applying the advice rule.
+First extract the $SSB$ for the intermediate year + 1. 
+
+```{r}
+fwdyr = max(years+1)
+fwdyr
+b = an(ssb(stkf)[,ac(fwdyr)])
+b
+```
+Apply Advice rule
+
+```{r}
+
+Fadv = applyAR(b,btrigger = an(bms["Btrigger"]),fmsy=an(bms["Fmsy"]))
+Fadv
+```
+Here, $F_{adv}=F_{MSY}$ given the $SSB$ is above the MSY $B_{trigger}$
+
+Add Fadv scenrario to runs
+
+```{r}
+Fs = c(Fs,"Fadv")
+```
+Specify $F$ scenario values for forecasts
+
+```{r}
+frefs = rbind(bms,FLPar(F0=0.0001,Fadv=Fadv))[Fs[Fs!="Fsq"]]
+
+frefs
+```
+
+
+Specify forecast folders
+
+```{r}
+fdirs = file.path(forecast.dir,paste0(Fs))
+```
+
+Loop through the process of modifying the `forecast.ss` file iteratively. 
+
+
+```{r,eval=F}
+
+
+for(i in 1:length(Fs)){
+  # create model folder by copying from the fmsydir with forecast setup
+  SSnewrun(model=fmsydir,dat=dat,ctl=ctl,newdir=fdirs[i],ss.exe = ss.exe)
+  # Read Forecast file
+  fc <- SS_readforecast(file.path(fdirs[i], "forecast.ss"))
+  # Apply Ffrac
+  # Create F forecast vector (generic)
+  # F target
+  if(Fs[i]!="Fsq"){
+  ftgt = an(frefs[Fs[i]])  
+  # scale to Fapic and apportion to fleets
+  fvec = c(rep(ftgt*Fratio*Fap$prop,nfyrs-nint))
+  } else {
+  # Use Fsq 
+  fvec = c(rep(Fsq$Fapic,nfyrs-nint))
+  }
+  # Creat F forecast table in forecast.ss
+  fc$ForeCatch[fc$ForeCatch$year%in%fc$ForeCatch$year[-c(1:nint)],"catch_or_F"] = fvec
+  SS_writeforecast(fc, file =file.path(fdirs[i], "forecast.ss"),overwrite = T)
+  r4ss::run(fdirs[i], skipfinished = F, show_in_console = TRUE, exe=ss.exe)
+}
+```
+
+Load all runs in one go with `SSgetoutput`, including the Fmsy run
+
+```{r,eval=F}
+Ffwd = SSgetoutput(dirvec = c(fdirs,fmsydir))
+save(Ffwd,file=file.path(rdata,"fwdFs.rdata"))
+```
+
+Check that these can be loaded
+
+```{r}
+load(file=file.path(rdata,"fwdFs.rdata"),verbose=T)
+
+```
+
+Quick check and plot `FLRef`
+
+```{r}
+
+fstks = FLStocks(Map(function(x,y){
+  out = FLRef::ssmvln(x,Fref="Btgt",verbose=F,run=y,addprj=T)
+  out = ss2FLStockR(out)
+  out@refpts =  stk@refpts # replace with benchmarks 
+  return(out)
+},x=Ffwd,y=as.list(c(paste0(Fs),"Fmsy"))))
+names(fstks) = c(paste0(Fs),"Fmsy")
+
+```
+
+Make final pretty forecast plot for F scenarios
+
+```{r , fig.height=6.5,fig.width=9, warning=F,message=F, fig.cap = paste0("Trajectories for the forecast scanarios under different fishing mortalities. The vertical dashed lines denote from left to right: reference year, implementation year for short-term forecasts and the catch advice year for the short-term forecasts ")}
+
+pstks = FLStocks(c(FLStocks(Assessment=window(stk,end=ss3rep$endyr)),
+                   window(fstks,start=ss3rep$endyr)))
+
+# Name plot pffwd (pffwd for F-based and pcfwd for catch-based)
+pffwd = plotAdvice(window(pstks,start=ss3rep$endyr-10),osa=T)+
+  geom_vline(xintercept = c(ss3rep$endyr:(ss3rep$endyr+2)),linetype=2,linewidth=0.3)+
+  scale_color_manual(values=c("black",ss3col(length(fstks))))+
+ scale_x_continuous(breaks=seq(1900,2200,2))+
+  theme(axis.text.x = element_text(size=8, angle=90,vjust=0.5))
+
+pffwd
+```
+
+Add uncertainties
+
+
+```{r}
+
+
+fstksi = FLStocks(Map(function(x,y){
+  out = FLRef::ssmvln(x,Fref="Btgt",verbose=F,run=y,addprj=T)
+  out = ss2FLStockR(out,output="iters")
+  out@refpts =  stk@refpts # replace with benchmarks 
+  return(out)
+},x=Ffwd,y=as.list(c(paste0(Fs),"Fmsy"))))
+names(fstksi) = paste0(c(paste0(Fs),"Fmsy"),".CI")
+
+```
+
+
+
+```{r , fig.height=6.5,fig.width=9, warning=F,message=F, fig.cap = paste0("Trajectories of medians and 90\\% CIs for the forecast scanarios under different fishing mortalities. The vertical dashed lines denote from left to right: reference year, implementation year for short-term forecasts and the catch advice year for the short-term forecasts ")}
+
+
+
+pstksi = FLStocks(c(FLStocks(
+  Assessment=window(stki,end=ss3rep$endyr)),
+  window(fstksi,start=ss3rep$endyr)))
+
+pffwdi = plotAdvice(window(pstksi,start=ss3rep$endyr-10),osa=T)+
+  geom_vline(xintercept = c(ss3rep$endyr:(ss3rep$endyr+2)),linetype=2,linewidth=0.3)+
+  scale_color_manual(values=c("black",ss3col(length(fstks))))+
+  scale_fill_manual(values=c("darkgrey",ss3col(length(fstks))))+
+ scale_x_continuous(breaks=seq(1900,2200,2))+
+  theme(axis.text.x = element_text(size=8, angle=90,vjust=0.5))
+
+pffwdi
+```
+
+
+
+## Step 6: Search for limit MSY Btrigger and Blim
+
+Here, an approach is introduced to use `ss3om` to translate SS3 to a full `FLR` stock object to then apply `FLasher` for solving for the $F's$ that lead to $MSY B_{trigger}$ and $B_{lim}$ 
+
+To do this the SS3 model is loaded to `FLR` with `ss3om`
+
+```{r,message=F,warning=F}
+run = "ref"
+ss3stk = window(ss3om::readFLSss3(run,wtatage = TRUE))
+sr = ss3om::readFLSRss3(run)
+stk@name = "anf.27.3a4"
+stk@desc = "2022,  ICES, SS3"
+```
+Convert to `FLStockR` and assign refpts
+
+```{r}
+ss3stk = FLStockR(ss3stk)
+ss3stk@refpts = stk@refpts
+```
+
+Compare with ss3
+
+```{r, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Comparison of estimated stock status trajectories from SS3 and ss3om")}
+plotAdvice(FLStocks(SS3=window(stk,end=ss3rep$endyr),ss3om=ss3stk))
+```
+
+Find $F$ for $MSY B_{trigger}$ in 2025 using the new `FLRef` function `fwdF4B()`
+
+```{r}
+fwdBtri = fwdF4B(ss3stk,sr=sr,btgt=bms["Btrigger"],
+                 niy=1,nfy=3,ival=TAC,imet="TAC",verbose=F)
+
+F.Btri = an(tail(fbar(fwdBtri),1))
+F.Btri
+
+
+```
+
+Find $F$ for $B_{lim}$
+
+
+```{r}
+fwdBlim = fwdF4B(ss3stk,sr=sr,btgt=bms["Blim"],
+                 niy=1,nfy=3,ival=TAC,imet="TAC",verbose=F)
+
+F.Blim = an(tail(fbar(fwdBlim),1))
+F.Blim
+
+
+```
+Check
+
+```{r, warning=F,message=F, fig.height=7,fig.width=9, fig.cap = paste0("Forecast of F leading to Blim and Btrigger in 2025")}
+plotAdvice(FLStocks("F(Blim)"=window(fwdBlim,start=2000),"F(Btri)"=window(fwdBtri,start=2000)))
+```
+
+Run the F.Btri and F.Blim forecasts in SS3
+
+
+```{r}
+Flims = c("F.Btri","F.Blim")
+frefs = rbind(frefs,FLPar(F.Btri=F.Btri,F.Blim=F.Blim))
+```
+
+Specify forecast folders
+
+```{r}
+fldirs = file.path(forecast.dir,paste0(paste0(Flims)))
+```
+
+Loop through the process of modifying the `forecast.ss` file iteratively. 
+
+
+```{r,eval=F}
+
+
+for(i in 1:length(Flims)){
+  # create model folder by copying from the fmsydir with forecast setup
+  SSnewrun(model=fmsydir,dat=dat,ctl=ctl,newdir=fldirs[i],ss.exe = ss.exe)
+  # Read Forecast file
+  fc <- SS_readforecast(file.path(fldirs[i], "forecast.ss"))
+  # Apply Ffrac
+  # Create F forecast vector (generic)
+  # F target from fref FLPar
+  ftgt = an(frefs[Flims[i]]) 
+  
+  # scale to Fapic and apportion to fleets
+  fvec = c(rep(ftgt*Fratio*Fap$prop,nfyrs-nint))
+  
+  # Creat F forecast table in forecast.ss
+  fc$ForeCatch[fc$ForeCatch$year%in%fc$ForeCatch$year[-c(1:nint)],"catch_or_F"] = fvec
+  SS_writeforecast(fc, file =file.path(fldirs[i], "forecast.ss"),overwrite = T)
+  r4ss::run(fldirs[i], skipfinished = F, show_in_console = TRUE, exe=ss.exe)
+}
+```
+
+## Step 7: Add fixed TAC forecast
+
+```{r}
+fldirs = file.path(forecast.dir,paste0(paste0(Flims)))
+```
+
+Loop through the process of modifying the `forecast.ss` file iteratively. 
+
+
+```{r,eval=F}
+tacdir = file.path(forecast.dir,"TACsq")
+
+  # create model folder by copying from the fmsydir with forecast setup
+  SSnewrun(model=fmsydir,dat=dat,ctl=ctl,newdir=tacdir,ss.exe = ss.exe)
+  # Read Forecast file
+  fc <- SS_readforecast(file.path(tacdir, "forecast.ss"))
+  # Creat Catch forecast table in forecast.ss
+  fc$ForeCatch[,"catch_or_F"] = rep(TAC*Cap$prop,nfyrs) 
+  fc$ForeCatch[,"basis"] = rep(2,nrow(fc$ForeCatch))
+  SS_writeforecast(fc, file =file.path(tacdir, "forecast.ss"),overwrite = T)
+  r4ss::run(tacdir, skipfinished = F, show_in_console = TRUE, exe=ss.exe)
+
+```
+
+
+\pagebreak
+
+## Step 8 : Summarize ICES Fishing Opportunities
+
+Load all runs in one go with `SSgetoutput`, including the Fmsy run
+
+```{r,eval=F}
+Ffwd2 = SSgetoutput(dirvec = c(fdirs,fmsydir,fldirs,tacdir))
+save(Ffwd2,file=file.path(rdata,"fwdFs2.rdata"))
+```
+
+Check that these can be loaded
+
+```{r}
+load(file=file.path(rdata,"fwdFs2.rdata"),verbose=T)
+
+```
+Convert to `FLR`
+
+```{r}
+
+fstks = FLStocks(Map(function(x,y){
+  out = FLRef::ssmvln(x,Fref="Btgt",verbose=F,run=y,addprj=T)
+  out = ss2FLStockR(out)
+  out@refpts =  stk@refpts # replace with benchmarks 
+  return(out)
+},x=Ffwd2,y=as.list(c(Fs,"Fmsy",Flims,"TACsq"))))
+names(fstks) = c(paste0(Fs),"Fmsy",Flims,"TACsq")
+
+```
+
+Rearrange 
+
+```{r}
+icesorder = c("Fadv","Flower","Fupper","F0","Fpa","Fmsy","F.Blim","F.Btri","Fsq","TACsq") 
+
+fstks = fstks[icesorder]
+```
+
+Make final pretty forecast plot for F scenarios
+
+
+```{r , fig.height=6.5,fig.width=9, warning=F,message=F, fig.cap = paste0("Trajectories for the forecast scanarios under different fishing mortalities. The vertical dashed lines denote from left to right: reference year, implementation year for short-term forecasts and the catch advice year for the short-term forecasts ")}
+
+pstks = FLStocks(c(FLStocks(Assessment=window(stk,end=ss3rep$endyr)),
+                   window(fstks,start=ss3rep$endyr)))
+
+# Name plot pffwd (pffwd for F-based and pcfwd for catch-based)
+pffwd = plotAdvice(window(pstks,start=ss3rep$endyr-10),osa=T)+
+  geom_vline(xintercept = c(ss3rep$endyr:(ss3rep$endyr+2)),linetype=2,linewidth=0.3)+
+  scale_color_manual(values=c("black",ss3col(length(fstks))))+
+ scale_x_continuous(breaks=seq(1900,2200,2))+
+  theme(axis.text.x = element_text(size=8, angle=90,vjust=0.5))
+
+pffwd
+```
+
+
+Create FLStocks with uncertainties
+
+
+```{r}
+
+
+fstksi = FLStocks(Map(function(x,y){
+  out = FLRef::ssmvln(x,Fref="Btgt",verbose=F,run=y,addprj=T)
+  out = ss2FLStockR(out,output="iters")
+  out@refpts =  stk@refpts # replace with benchmarks 
+  return(out)
+},x=Ffwd2,y=as.list(c(Fs,"Fmsy",Flims,"TACsq"))))
+names(fstksi) = c(paste0(Fs),"Fmsy",Flims,"TACsq")
+fstksi = fstksi[icesorder]
+```
+
+Make ICES Fishing Opportunity Table input
+
+
+```{r}
+fish.ops = fwd2ices(stock=fstks,uncertainty=fstksi)
+
+```
+
+
+
+```{r}
+knitr::kable(fish.ops,"pipe",
+      align ="lccccc",
+      caption=" Summary of Fishing Opportunities.")
+
+```
+
+
+The output can also be saved as `.csv` files 
+
+```{r}
+write.csv(fish.ops,file=file.path(output.dir,paste0(stk2@name,"_FishOps.csv")),row.names = F)
+```
