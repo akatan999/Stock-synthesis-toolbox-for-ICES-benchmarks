@@ -3,7 +3,7 @@ Code and scripts for ICES stock synthesis benchmark models
 
 Here we collate a series of scripts and code provided by different authors and used in several ICES workshops and other fora to conduct a full benchmark. 
 
-First, you need to install all necessary packages:
+First, you need to install all necessary packages following the [installation guidelines](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/Pdf/Install-packages-for-stock-synthesis-benchmark.pdf) by running [SS3.UserGuide.FishingOpportunities.Rmd](https://github.com/akatan999/Stock-synthesis-toolbox-for-ICES-benchmarks/blob/main/Rmd/SS3.UserGuide.FishingOpportunities.Rmd)
 
 For this, you should use Install packages for stock synthesis benchmark.Rmd (originally created by Henning Winker)
 
