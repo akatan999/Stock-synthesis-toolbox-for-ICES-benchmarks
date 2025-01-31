@@ -9,7 +9,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # The ICES approach to setting Reference Points
 
-This Markdown document outlines the steps involved in estimating PA and MSY reference points for hake in divisions 8.c and 9.a, Southern stock as part of WKAngHake benchmark 2022. It follows the current technical guidelines:
+This Markdown document outlines the steps involved in estimating PA and MSY reference points for blackspot seabream in 9.a. It follows the current technical guidelines:
 
 [Details here.](https://www.ices.dk/sites/pub/Publication%20Reports/Guidelines%20and%20Policies/16.04.03.01_Reference_points_for_category_1_and_2.pdf)
 
