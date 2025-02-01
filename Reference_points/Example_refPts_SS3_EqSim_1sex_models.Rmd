@@ -1,0 +1,291 @@
+---
+title: "Pollack 7a Eqsim"
+author: "Hans Gerritsen, modified by Tim Earl and Max Cardinale"
+date: "30/01/2025"
+output: word_document
+---
+
+## The ICES approach to setting Reference Points
+
+This Markdown document outlines the steps involved in estimating PA and MSY reference points for pollack in divisions 7a as part of WKBSS3 benchmark 2025. It follows the current technical guidelines: <https://www.ices.dk/sites/pub/Publication%20Reports/Guidelines%20and%20Policies/16.04.03.01_Reference_points_for_category_1_and_2.pdf>.
+
+**Some plot legends refer to landings or catch - These should all be read at "Total removals" - Commercial landings, discards, recreational landings + the proportion of recreational releases assumed to die following release**
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T,message=FALSE, warning=FALSE)
+```
+
+## Get the data in FLR
+```{r}
+library(r4ss)
+library(ss3om) #for readLFSss3
+library(FLCore)
+library(msy)
+library(icesAdvice)
+library(ggplot2)
+library(dplyr)
+
+
+#Slight modification from package ss3om to account for apparent name change in F type
+readFLSss3 <- function (dir, repfile = "Report.sso", compfile = "CompReport.sso", 
+    wtatage = out$wtatage_switch, ...) 
+{
+   # browser()
+    out <- readOutputss3(dir, repfile = repfile, compfile = compfile)
+    if (out$SS_versionNumeric > 3.24) 
+        res <- buildFLSss330(out, ...)
+    else res <- buildFLSss3(out, ...)
+    if (wtatage) {
+        waafile <- list.files(dir)[grep("wtatage.ss_new", list.files(dir))]
+        waa <- data.table(SS_readwtatage(file.path(dir, waafile)))
+        waa[, `:=`(year, abs(Yr))]
+        waa[, `:=`(unit, Sex)]
+        waa[, `:=`(season, Seas)]
+        ages <- dimnames(res)$age
+        waa <- waa[year %in% dimnames(res)$year, ]
+        was <- split(waa, by = "Fleet")
+        wasq <- lapply(was, function(x) as.FLQuant(melt(x[, -seq(1, 
+            6)], id = c("unit", "year", "season"), measure = ages, 
+            variable.name = "age", value.name = "data")))
+        stock.wt(res)[] <- wasq[["0"]]
+        nmat <- wasq[["-2"]]%/%wasq[["-1"]]
+        mat(res)[] <- nmat
+        if (is.null(out$fleet_type)) {
+            out$fleet_type <- rep(3, out$nfleets)
+            out$fleet_type[out$fleet_ID %in% unique(out$catch$Fleet)] <- 1
+        }
+        idx <- names(wasq)[!names(wasq) %in% c("0", "-1", "-2")][out$fleet_type == 
+            1]
+        catch.wt(res)[] <- Reduce("+", wasq[idx])/(length(idx))
+        landings.wt(res) <- catch.wt(res)
+        discards.wt(res) <- catch.wt(res)
+        catch(res) <- computeCatch(res)
+        landings(res) <- computeLandings(res)
+        discards(res) <- computeDiscards(res)
+        stock(res) <- computeStock(res)
+    }
+    if (file.exists(file.path(dir, "starter.ss"))) {
+        sta <- SS_readstarter(file.path(dir, "starter.ss"), verbose = FALSE)
+        if (sta$F_std_units == 5) {    #F_reporting units in ss3om package
+            range(res)[c("minfbar", "maxfbar")] <- sta$F_age_range
+        }
+    }
+    return(res)
+}
+
+dir <- getwd()
+ass.wd=paste(dir, "/Basecase_3001",sep="")
+
+replist <- SS_output(paste0(ass.wd),verbose=F,printstats=F)
+stock0 <- readFLSss3(paste0(ass.wd))
+
+stock0@harvest@units <- 'f'
+
+# check fbar range used in SS
+replist$F_std_basis
+stock0@range['minfbar'] <- 3
+stock0@range['maxfbar'] <- 7
+
+#Define SSB time as the start of the year
+m.spwn(stock0) <- 0      
+harvest.spwn(stock0) <- 0
+
+# # combine the sexes #Not needed for bass as combined sex
+# stock <- FLCore:::nounit(stock0)  #
+stock <- stock0
+  
+#check that F is ok
+all(harvest(stock) ==  harvest(stock.n(stock), catch=catch.n(stock), m=m(stock)))
+
+SSssb <- subset(replist$derived_quants,substring(Label,1,6)%in%c('SSB_19','SSB_20')) %>% 
+  mutate(Yr=as.numeric(substring(Label,5,9)))
+ plot(SSssb$Yr,SSssb$Value)
+lines(stock@range[[4]]:stock@range[[5]],ssb(stock))
+# lines(stock0@range[[4]]:stock0@range[[5]],ssb(stock0)[,,1],col='red')
+legend('topright',c('SS ssb','flr ssb'),pch=c(1,NA),lty=c(NA,1),col=c(1,1))
+
+# check recruitment
+SSrec <- subset(replist$derived_quants,substring(Label,1,7)%in%c('Recr_19','Recr_20')) %>%
+  mutate(Yr=as.numeric(substring(Label,6,10)))
+plot(SSrec$Yr,SSrec$Value, ylim=c(0,max(SSrec$Value)))
+lines(stock@range[[4]]:stock@range[[5]],rec(stock))
+legend('topleft',c('SS rec','flr rec'),pch=c(1,NA),lty=c(NA,1),col=1)
+
+# check F
+SSf <- subset(replist$derived_quants,substring(Label,1,4)%in%c('F_19','F_20')) %>%
+  mutate(Yr=as.numeric(substring(Label,3,7)))
+plot(SSf$Yr,SSf$Value, ylim=c(0,max(SSf$Value)))
+lines(stock@range[[4]]:stock@range[[5]],fbar(stock))
+legend('topleft',c('SS F','FLR F'),pch=c(1,NA),lty=c(NA,1),col=1)
+
+
+# stock summary 
+plot(stock) + facet_wrap(~qname, scales="free")
+
+
+```
+
+
+## Stock-recruit
+Now get the stock-recruit para from SS and force the SR function to be the same. This fixes the steepness and R0 but not sigma R, which it will estimate from the actual SR pairs...
+
+```{r}
+# SR para from SS
+r0 <- replist$parameters$Value[replist$parameters$Label=="SR_LN(R0)"]
+R0 <- exp(r0)
+h <- replist$parameters$Value[replist$parameters$Label=="SR_BH_steep"]
+B0 <- c(replist$derived_quants$Value[replist$derived_quants$Label=="SSB_Virgin"])
+# other SR para are not used here
+sigmaR <- replist$parameters$Value[replist$parameters$Label=="SR_sigmaR"]
+rho <- replist$parameters$Value[replist$parameters$Label=="SR_autocorr"]
+
+FixedBevholt <- function (ab,ssb) log(4*h*R0*ssb/(B0*(1-h)+ssb*(5*h-1)))
+# be careful to not modify h, R0 and B0 later in the script
+```
+
+Check what SR looks like, also compare with BH fit to the data (without fixing h). FixedBevHolt is the assessment output.
+
+```{r}
+set.seed(1)
+nsamp <- 100 #increase number of samples for final run (e.g 1000)
+fit_bh_temp <- eqsr_fit(stock, nsamp = nsamp, models = c("FixedBevholt","Bevholt")) 
+fit_bh <- eqsr_fit(stock, nsamp = nsamp, models = c("FixedBevholt")) 
+eqsr_plot(fit_bh_temp,ggPlot=T)
+fit_bh$stk <- stock0#Want to have data up to 2023 available for selectivity
+
+#with(replist$SPAWN_RECR_CURVE,points(SSB,Recruitment,col=5,pch=16))
+```
+
+## Identifying appropriate data
+(now excluded) Exclude 1950-1990 as not estimated and 2023 estimate of recruitment that is substantially more uncertain than previous estimates. 
+```{r}
+
+head(SSrec, 30)[,1:3]
+tail(SSrec, 10)[,1:3]
+
+stock <- window(stock,start=1991,end=2022) 
+```
+
+## Step 2. Stock type and step 3. Blim
+The stock is type 5 (no evidence of impaired recruitment), so Blim is Bloss = B2017 = `r formatC(c(ssb(stock)[,'2017',]),format='d',big.mark=",")`.
+```{r}
+plot(c(ssb(stock)),c(rec(stock)),
+     xlim=c(0,max(ssb(stock))),ylim=c(0,max(rec(stock))),
+     xlab='Total SSB',ylab='recruits')
+text(c(ssb(stock)),c(rec(stock)),stock@range[4]:stock@range[5])
+Blim <- round(c(ssb(stock)[,'2017',]))
+abline(v=Blim,lty=3)
+
+ratio = Blim/B0
+```
+
+Sanity check: Check Blim is not less than 15% of B0. Percentage is `r round(100*Blim/B0, 0)`%.
+
+
+## step 4. Other PA reference points from Blim
+```{r}
+sigmaSSB_SS <- round(with(subset(replist$derived_quants,Label=='SSB_2023'),StdDev/Value),3)
+## or just stick to the default?
+#sigmaSSB <- 0.2 # default
+
+Bpa <- round(Blim * exp(1.645 * sigmaSSB_SS))
+Bpa
+```
+## Flim
+
+No longer needed
+
+## Step 2. Fmsy and Btrigger
+FMSY should initially be calculated based on an evaluation with the inclusion of stochasticity in a population (i.e. recruitment, M, maturity, growth) and fishery (e.g. selectivity) as well as assessment/advice error. This is a constant F, which should provide maximum yield without biomass constraints (without MSY Btrigger). Error is included as this is the condition analogous to management strategy evaluations (MSEs) that will prevail in practice. Note that in order to ensure consistency between the precautionary and the MSY frameworks, FMSY is not allowed to be above Fpa; therefore, if the FMSY value calculated initially is above Fpa, FMSY is reduced to Fpa.
+
+```{r}
+# fit BH again using only the selected years
+
+eqsr_plot(fit_bh,ggPlot=FALSE)
+
+
+## Forecast error (see Guidance document for details on calculation of these values)
+# F
+cvF  <- 0.212                                 # Default = 0.212
+phiF <-	0.423                                 # Default = 0.423
+# SSB
+cvSSB <- 0                                    # Default = 0
+phiSSB <- 0                                   # Default = 0
+
+
+sim_noTrig <- eqsim_run(fit_bh,
+                            Fcv=cvF, Fphi=phiF, SSBcv=cvSSB,
+                            rhologRec=rho,
+                            Btrigger = 0, Blim=Blim, Bpa=Bpa,
+                            Nrun=200, Fscan = seq(0,0.5,len=101),verbose=F)
+
+Fmsy_tmp <- round(sim_noTrig$Refs2["lanF","medianMSY"],3)
+eqsim_plot_range(sim_noTrig, type="median")
+```
+
+Fmsy is initially estimated as `r Fmsy_tmp`. Note that SS estimates Fmsy at `r round(subset(replist$derived_quants,Label== "annF_MSY")$Value,3)`.
+
+MSY Btrigger should be selected to safeguard against an undesirable or unexpected low SSB when fishing at FMSY. For most stocks that lack data on fishing at FMSY, MSY Btrigger is set at Bpa. However, as a stock starts to be fished consistently with FMSY, it is possible to move towards implementation of a value for MSY Btrigger that reflects the 5th percentile definition of MSY Btrigger
+
+```{r}
+data.05<-sim_noTrig$rbp
+x.05 <- data.05[data.05$variable == "Spawning stock biomass", ]$Ftarget
+b.05 <- data.05[data.05$variable == "Spawning stock biomass", ]$p05
+plot(b.05~x.05, ylab="SSB", xlab="F")
+abline(v=Fmsy_tmp)
+i <- which(x.05<(Fmsy_tmp+0.1))
+b.lm <- loess(b.05[i] ~ x.05[i])
+lines(x.05[i],c(predict(b.lm)),type='l')
+
+Bmsy5pc <- round(predict(b.lm,Fmsy_tmp))
+abline(h=Bmsy5pc)
+```
+
+So we can use Btrigger = Bpa =`r formatC(Bpa,format='d',big.mark=",")` or we can use Bmsy5pc = `r  formatC(Bmsy5pc,format='d',big.mark=",")`. Bmsy5pc is higher so go with that.
+
+*CHECK: 
+```{r}
+Btrigger <- max(Bpa, Bmsy5pc)
+formatC(Btrigger,format='d',big.mark=",")
+```
+
+The ICES MSY AR should be evaluated to check that the FMSY and MSY Btrigger combination fulfills the precautionary criterion of having less than 5% annual probability of SSB < Blim in the long term. The evaluation must include realistic assessment/advice error and stochasticity in population biology and fishery selectivity.
+
+*Need to look more at the flow chart on page 11 of guidelines*
+
+```{r}
+sim_Trig <- eqsim_run(fit_bh,
+                          Fcv=cvF, Fphi=phiF, SSBcv=cvSSB,
+                          rhologRec=rho,
+                          Btrigger = Btrigger, Blim=Blim,Bpa=Bpa,
+                          Nrun=200, Fscan = seq(0,2.5,len=101),verbose=F)
+eqsim_plot(sim_Trig,catch=F)
+eqsim_plot_range(sim_Trig, type="median")
+Fp05 <- round(sim_Trig$Refs2["catF","F05"],3)
+```
+
+If the precautionary criterion evaluated in point 3 is not met, then FMSY should be reduced from the value calculated above until the precautionary criterion is met (i.e. reduce FMSY to FMSY = Fpa).
+Fp05 is estimated at `r Fp05`.
+
+```{r}
+Fmsy <- round(min(sim_Trig$Refs2["lanF","medianMSY"], Fp05),3)
+Fupper <- round(min(sim_Trig$Refs2["lanF","Medupper"], Fp05),3)
+Flower <- round(sim_Trig$Refs2["lanF","Medlower"],3)
+```
+
+The estimated reference points are shown below. Fpa is estimated with a Beverton-Holt SR and the Btrigger advice rule, resulting in a much flatter yield at high F and a relatively high Fpa.
+
+This is a consequence of one of the inconsistencies of the current framework which uses two different SR functions and the advice rule. In this situation Flim would be undefined.
+
+Reference Point|Value                              |Rationale
+---------------|-----------------------------------|-----------------------------------------
+Blim           |`r formatC(Blim,format='d',big.mark=",")`     |B(2017); lowest SSB with high recruitment
+Bpa            |`r formatC(Bpa,format='d',big.mark=",")`      |Blim with assessment error
+MSY Btrigger   |`r formatC(Btrigger,format='d',big.mark=",")` |Bpa
+Fpa            |`r Fp05`                                      |F with 95% probability of SSB≥Blim (BH with Btrigger)
+Fmsy           |`r Fmsy`                                      |Fpa
+FmsyLower      |`r Flower`                                    |Stochastic simulations
+FmsyUpper      |`r Fupper`                                    |Fpa
+Bmsy5pc        |`r formatC(Bmsy5pc,format='d',big.mark=",")`  |5% probability of SSB < Blim
+
