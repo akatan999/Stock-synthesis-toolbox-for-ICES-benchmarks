@@ -1,7 +1,7 @@
 # Stock-synthesis-toolbox-for-ICES-benchmarks
 Code and scripts for ICES stock synthesis benchmark models
 
-Here we collate a series of scripts and code provided by different authors and used in several ICES workshops and other fora to conduct a full benchmark with a Stock Synthesis bestcase model. 
+Here we collate a series of scripts and code provided by different authors and used in several ICES workshops and other fora to conduct a full benchmark with a Stock Synthesis to select a bestcase model for advice. 
 
 First, you need to install all necessary packages. 
 
