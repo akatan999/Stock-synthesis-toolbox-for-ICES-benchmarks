@@ -18,7 +18,7 @@ Then you can follow the scheme below to select the best model from a grid of alt
 
 Scripts for additional diagnostics: 
 
-6.	Script for profiling M vectors and steepness at the same time (Profiling M and steepness.Rmd, originally created by Laurie Kell). For this to run, you need to create a folder with the 4 files and the exe and call this one "files". 
+6.	Script for profiling M vectors and steepness at the same time (Profiling M and steepness.Rmd, originally created by Laurie Kell). For this to run, you need to create a folder with the 4 files and the exe and call this one "files". Then you need to add # natM at the end of the M vector.
 7.	Script for profiling M at age (M_at_age_profile.R originally created by Iago Mosqueira)
 8.	Script for jittering (Jittering_profiling & retro.R using NOAA wrapper); includes also wrappers for retrospective (which is also run for all models using script 1) and profiling (also included at the end of script 3)
 9.	Use fishlife for estimating life history priors (Fishlife.R)
