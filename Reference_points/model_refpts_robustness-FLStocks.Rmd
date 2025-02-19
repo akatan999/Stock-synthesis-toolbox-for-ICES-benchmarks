@@ -1,0 +1,663 @@
+---
+title: "MSE for Southern seabass example"
+
+author: 
+ - Max Cardinale (SLU), modified from code 
+ - provided by Iago Mosqueira for WKREBUILD and WKNEWREF
+
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    #keep_tex: false
+vignette: >
+  %\VignetteIndexEntry{benchmark Vignetted}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+  
+```{r wrap-hook, echo = FALSE,warning=F,message=F}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "  " ,fig.align = 'center', cache=FALSE,tidy.opts=list(width.cutoff=60), tidy=TRUE)
+
+```
+
+\pagebreak
+
+
+# Southern bass example
+
+
+Southern bass model has been developed in 2024 and reviewed by a benchmark.  
+
+
+## Load models created by Create FLR stock objects for MSE.R file and attributes (created by MSE_reference points_estimation_best case.R file
+
+
+Load libraries
+
+```{r, message=FALSE, warning=FALSE}
+
+library(mse)
+library(FLRef)
+library(FLBRP)
+library(progressr)
+#handlers(global=TRUE)
+#install.packages(c("FLRef"), repo = "https://flr.r-universe.dev")
+library(doFuture)
+library(r4ss)
+library(ss3diags)
+library(ss3om)
+library(icesTAF)
+library(parallel)
+library(mseviz)
+library(dplyr)
+#devtools::install_github("mebrooks/stockrecruit/StockRecruitSET", build_opts = c("--no-resave-data", "--no-manual"))
+```
+
+Get the libraries specifications
+
+```{r, message=TRUE, warning=FALSE}
+
+sessionInfo()
+```
+
+
+Define folder with R data files, models and other additional parameters (one basecase and one mock model (same as basecase) used as example)
+
+
+```{r}
+setwd("~/Max/Commitees/ICES/WKBBASS/MSE")
+
+plan(multisession, workers=9)
+
+its <- 500
+fy  <- 2082
+iy  <- 2024
+
+basecase <- mget(load("Reference_run.rda"))
+R0reduced <- mget(load("Reference_run.rda"))
+load("Southerseabass_attributes.rda")
+
+```
+
+## OMs conditioning, defining FLStocks, FLSRs and SS3 refpts
+
+```{r}
+
+stks <- FLStocks(REF=basecase$stk, RED=R0reduced$stk)
+srrs <- FLSRs(REF=basecase$srr, RED=R0reduced$srr)
+srps <- list(REF=basecase$rps, RED=R0reduced$rps)
+brps <- list(REF=basecase$brp, RED=R0reduced$brp)
+
+```
+
+Define functions
+
+```{r}
+
+getabSR <- function(stk, srr) {
+  ab(fmle(as.FLSR(stk, model='bevholtSV'),
+    fixed=list(s=params(srr)$s, v=params(srr)$v,
+    spr0=params(srr)$v/params(srr)$R0)))
+}
+.
+getBRPs <- function(stk, srr) {
+  # COERCE FLSR as bevholt(a,b)
+  nsr <- getabSR(stk, srr)
+
+  # FIT brps
+  brp <- brp(FLBRP(stk, sr=nsr))
+
+  # EXTRACT brefpts
+  brps <- remap(refpts(brp), R0=c('virgin', 'rec'), MSY=c('msy', 'yield'))
+   
+  return(brps)
+}
+
+```
+
+
+### This part is only to hack Blim up to line 160
+
+
+Load the stock object in FLR
+
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+stk_single <- readFLSss3(dir="C:/Users/mascar/Documents/Max/Commitees/ICES/WKBBASS/Southern stock/Basecase",wtatage = TRUE)
+```
+
+
+Load the SS model and parameters
+
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+
+out <- SS_output(dir="C:/Users/mascar/Documents/Max/Commitees/ICES/WKBBASS/Southern stock/Basecase",covar=T, printstats=FALSE)
+R0 <- exp(out$parameters$Value[out$parameters$Label=="SR_LN(R0)"])
+s <- out$parameters$Value[out$parameters$Label=="SR_BH_steep"]
+sigmaR <- out$parameters$Value[out$parameters$Label=="SR_sigmaR"]
+rho <- out$parameters$Value[out$parameters$Label=="SR_autocorr"]
+B0 <- out$derived_quants$Value[out$derived_quants$Label=="SSB_unfished"]
+SSBcv <- out$derived_quants$StdDev[out$derived_quants$Label=="SSB_2023"]/out$derived_quants$Value[out$derived_quants$Label=="SSB_2023"]
+Fcv <- out$derived_quants$StdDev[out$derived_quants$Label=="F_2023"]/out$derived_quants$Value[out$derived_quants$Label=="F_2023"]
+BMSYss <- out$derived_quants$Value[out$derived_quants$Label=="SSB_MSY"]
+FMSYss <- out$derived_quants$Value[out$derived_quants$Label=="annF_MSY"]
+MSYss <- out$derived_quants$Value[out$derived_quants$Label=="Dead_Catch_MSY"]
+TBOss <-  out$derived_quants$Value[out$derived_quants$Label=="Totbio_unfished"]
+
+```
+
+
+Coerce FLSR as bevholt(a,b) from SS
+
+
+```{r}
+nsr <- ab(fmle(as.FLSR(stk, model='bevholtSV'),
+               fixed=list(s=s, v=B0,
+                          spr0=B0/R0)))
+```
+
+
+Fit brps as single stock to hack Blim for the oms list. Blim set as 32% of B0
+
+
+```{r}
+brp_single <- brp(FLBRP(stk, sr=nsr))
+brps_single <- remap(refpts(brp_single), R0=c('virgin', 'rec'), MSY=c('msy', 'yield'))
+brps_single$Blim <- B0*0.15
+```
+
+
+\pagebreak
+
+
+# Get Brps and add Blim to refpts
+
+
+```{r}
+brps <- lapply(srps, rbind, Blim=brps_single$Blim)
+```
+
+
+## Coerce SRRs to ab bevholt
+
+
+```{r}
+nsrs <- Map(function(x,y) getabSR(x, y),
+  x=stks, y=srrs)
+```
+
+
+## Create FLoms
+
+```{r}
+oms <- Map(function(x,y,z) FLom(stock=x, sr=y, refpts=z),
+  x=stks, y=srrs, z=brps)
+```
+
+
+## Extend to the future
+
+```{r}
+oms <- lapply(oms, function(x) propagate(fwdWindow(x, end=fy), its))
+```
+
+
+## Add SR deviances, same across OMs, and add those to OMs
+
+```{r}
+devs <- rlnormar1(its, sdlog=sigmaR, rho=rho, years=seq(2023, fy))
+
+oms <- lapply(oms, function(x) {
+  deviances(x) <- devs
+  return(x)
+  })
+```
+
+
+## F and SSB deviances for shortcut and STF
+
+
+```{r}
+sdevs <- shortcut_devs(oms[[1]], Fcv=Fcv, Fphi=0.423, SSBcv=SSBcv)
+```
+
+\pagebreak
+
+
+# MP setup
+
+
+## Setup standard ICES advice rule 
+
+
+```{r}
+arule <- mpCtrl(list(
+
+  # (est)imation method: shortcut.sa + SSB deviances
+  est = mseCtrl(method=shortcut.sa,
+    args=list(SSBdevs=sdevs$SSB)),
+
+  # hcr: hockeystick (fbar ~ ssb | lim, trigger, target, min)
+  hcr = mseCtrl(method=hockeystick.hcr,
+    args=list(lim=0, trigger=trigger, target=target,
+    min=0, metric="ssb", output="fbar")),
+
+  # (i)mplementation (sys)tem: tac.is (C ~ F) + F deviances
+  # rec as GM ignoring last 2 years
+  isys = mseCtrl(method=tac.is,
+    args=list(recyrs=-2, fmin=0, Fdevs=sdevs$F))
+  ))
+```
+
+
+Plotting the HCR
+
+
+```{r, fig1, fig.height=4,fig.width=6, fig.cap = paste0("Harvest control rule used in the MSE"), warning=FALSE}
+setwd("C:/Users/mascar/Documents/Max/Commitees/ICES/WKBBASS/MSE")
+       plot_hockeystick.hcr(arule$hcr,
+                            labels=c(trigger="Btrigger", target="Ftarget")) +
+         xlab("SSB (t)") + ylab(expression(bar(F))) +
+         ggtitle("HCR")
+
+mseargs <- list(iy=iy-1, fy=fy, data_lag=1, management_lag=1, frq=1)
+```
+
+
+Get candidate values for Btrigger & Ftarget creating combinations of based on fraction of B0 (FBx ~ Bx * c(0.40, 0.45, 0.05)) and adding FMSY ~ BMSY * c(0.6, 0.8, 1) (add more combinations when running the final MSE)
+
+
+```{r}
+
+frps <- Map(function(x, y) {
+    lapply(seq(40, 45, by=5), function(i) {
+      Fbrp(computeFbrp(x, sr=y, proxy="bx", x=i, blim=0.15))
+    })
+  }, x=stks, y=nsrs)
+
+opts <- Map(function(x, y) {
+  res <- list(
+    target=rep(unlist(lapply(x, '[', 1)), each=3),
+    trigger=unlist(lapply(seq(0.40, 0.45, by=0.05),
+      function(i) (c(refpts(y)$SB0) * i) * c(0.60, 0.8, 1))))
+  res$target <- c(res$target, rep(c(refpts(y)$FMSY), 3))
+  res$trigger <- c(res$trigger, c(refpts(y)$SBMSY) * c(0.6, 0.8, 1))
+  return(res)
+  }, x=frps, y=oms)
+
+nms <- c(paste0(rep(paste0("FB", seq(40, 45, by=5)), each=3),
+  rep(c(".6", ".8", "1"), 2)), c("FMSY.6", "FMSY.8", "FMSY1"))
+```
+
+
+Run for all options on 'hcr' control element for all OMs and ICES advice. To be done on a cluster pc and saved for loading (plans is a very large file)
+
+
+```{r, eval=F}
+system.time(plans <- Map(function(x, y) {
+
+  
+  runs <- mps(x, ctrl=arule, args=mseargs, hcr=y, names=nms)
+  
+  runs$advice <- advice <- mp(x, ctrl=arule, args=mseargs)
+
+  return(runs)
+  
+  }, x=oms, y=opts))
+```
+
+
+Save the MSE results
+
+
+```{r, eval=FALSE}
+save(oms, plans, file="plans.rda", compress="xz")
+```
+
+
+## Compute MSE performances
+
+
+Define performances metrics
+
+
+```{r}
+metrics <- list(SB = ssb, F = fbar, C = landings, TC = catch, Rec = rec)
+
+stats <- list(
+  medianFmsy= list(~yearMedians(F/FMSY), name="F/Fmsy",
+    desc="Median annual F/Fmsy"),
+  medianBmsy = list(~yearMedians(SB/SBMSY), name="B/Bmsy",
+    desc="Median annual B/Bmsy"),
+  medianCmsy = list(~yearMedians(C/MSY), name="Catch/MSY",
+    desc="Median Catch/MSY over years"),
+  aavC = list(~yearMedians(iav(C)), name="AAV",
+    desc="Median annual variation in catches"),
+  riskBlim = list(~apply(iterMeans((SB/Blim) < 1),1,max), 
+    name="P3(B<Blim)", desc="Probability that SSB < Blim"),
+  risk10SB0 = list(~apply(iterMeans((SB/(SB0 * 0.10)) < 1), 1, mean),
+    name="P(B<SB0.10)", desc="Probability that SSB < 10% SB0"),
+  P80BMSY = list(~apply(iterMeans((SB/(SBMSY * 0.8)) > 1), 1, max),
+    name="B>80Bmsy", desc="Probability that SSB > 80% x Bmsy"),
+  medianSBMSY = list(~yearMedians(SB/SBMSY), name="SSB/SSB[MSY]",
+    desc="Median annual SSB/SSBmsy"),
+  medianFMSY = list(~yearMedians(F/FMSY), name="F/F[MSY]",
+    desc="Median annual F/FMSY")
+)
+```
+
+
+Compute performances, add HCR parameters Btrigger and Ftarget and define long time horizon for evaluation
+
+
+```{r, eval=FALSE}
+plans_perf <- lapply(plans, function(x) {
+  
+  res <- performance(x, statistics=stats,
+                     years=list(all=2024:fy, long=2053:fy))
+
+  hps <- rbindlist(lapply(x, function(i)
+    args(control(i)$hcr)[c("trigger", "target")]), idcol='mp')
+  
+  performance(x) <- merge(res, hps, by='mp')
+
+  return(x)
+})
+
+```
+
+
+Create MSE performance table
+
+
+```{r, eval=FALSE}
+perf <- rbindlist(lapply(plans_perf, performance), idcol="om")
+write.csv(perf,file="msePerf_data.csv")
+```
+
+
+Save performances objects
+
+
+```{r, eval=FALSE}
+save(oms, plans, plans_perf, perf, file="plans.rda", compress="xz")
+```
+
+
+Load performances objects derived from a run made on a 16 cores cluster computer on Linux
+
+
+```{r}
+load("~/Max/Commitees/ICES/WKBBASS/MSE/plans.rda")
+```
+
+
+# MSE Performance plots and tables
+
+
+```{r fig2, fig.height=12,fig.width=10, fig.cap = paste0("Southern seabass stock. MSE performance plot for OM1")}
+
+ncol = length(unique(perf$mp)) # n colors
+perfom1 = perf[perf$om=="REF",]
+pbp = plotBPs(perfom1[perfom1$year=="long",],
+statistics=c("medianFmsy","medianBmsy","medianCmsy", "aavC", "riskBlim", "P80BMSY"), 
+size=3, target = c(medianFmsy=1,medianBmsy=1, medianCmsy=1),
+limit= c(riskBlim=0.05,P80BMSY=0.95),
+yminmax = c(0.05, 0.95))+theme_bw()+
+facet_wrap(~name,scales = "free_y",ncol=2)+
+ggtitle(paste0("Performance: Long"))+
+ylab("Performance statistics")+
+scale_fill_manual(values=ss3col(ncol))+ # USE FLRef::ss3col
+theme(axis.text.x=element_blank())+xlab("Candidates")
+pbp
+
+```
+
+
+```{r fig3, fig.height=12,fig.width=10, fig.cap = paste0("Southern seabass stock. MSE performance plot for OM2")}
+
+ncol = length(unique(perf$mp)) # n colors
+perfom2 = perf[perf$om=="RED",]
+pbp = plotBPs(perfom2[perfom2$year=="long",],
+statistics=c("medianFmsy","medianBmsy","medianCmsy", "aavC", "riskBlim", "P80BMSY"), 
+size=3, target = c(medianFmsy=1,medianBmsy=1, medianCmsy=1),
+limit= c(riskBlim=0.05,P80BMSY=0.95),
+yminmax = c(0.05, 0.95))+theme_bw()+
+facet_wrap(~name,scales = "free_y",ncol=2)+
+ggtitle(paste0("Performance: Long"))+
+ylab("Performance statistics")+
+scale_fill_manual(values=ss3col(ncol))+ # USE FLRef::ss3col
+theme(axis.text.x=element_blank())+xlab("Candidates")
+pbp
+
+```
+
+
+```{r fig4, fig.height=12,fig.width=10, fig.cap = paste0("Southern seabass stock. MSE performance plot, ensemble")}
+
+ncol = length(unique(perf$mp)) # n colors
+pbp = plotBPs(perf[perf$year=="long",],statistics=c("medianFmsy","medianBmsy","medianCmsy", "aavC", "riskBlim", "P80BMSY"), size=3,
+              target = c(medianFmsy=1,medianBmsy=1, medianCmsy=1),
+              limit= c(riskBlim=0.05,P80BMSY=0.95),
+              yminmax = c(0.05, 0.95))+theme_bw()+
+  facet_wrap(~name,scales = "free_y",ncol=2)+
+  ggtitle(paste0("Performance: Long"))+
+  ylab("Performance statistics")+
+  scale_fill_manual(values=ss3col(ncol))+ # USE FLRef::ss3col
+  theme(axis.text.x=element_blank())+xlab("Candidates")
+pbp
+
+```
+
+\pagebreak
+
+
+## MSE Table
+
+
+```{r, warning=FALSE, message=FALSE}
+
+perf_table <- perf %>%                              # Specify data frame
+  group_by(om, name, mp, year, trigger, target) %>%     # Specify group indicator
+  summarise_at(vars(data),                          # Specify column
+               list(Median = median),na.rm = TRUE)  # Specify function
+
+write.csv(perf_table,file="msePerf_table.csv")
+```
+
+
+## MSE kobe plot
+
+```{r fig5, fig.height=8,fig.width=10, fig.cap = paste0("Southern seabass stock. MSE kobe plot, ensemble"), warning=FALSE}
+
+kbcex =function(){theme(plot.title = element_text(size=10),
+                        legend.key.size = unit(0.3, 'cm'), #change legend key size
+                        legend.key.height = unit(0.4, 'cm'), #change legend key height
+                        legend.key.width = unit(0.4, 'cm'), #change legend key width
+                        legend.text = element_text(size=10)) #change legend text font size
+}
+kobeMPs(perf,y="medianFmsy", x="medianBmsy", SBlim=NULL, Ftarget = 1)+
+  ylab(expression(F/F[MSY]))+xlab(expression(B/B[MSY]))+ylim(0,2.5)+kbcex()+theme()
+
+```
+
+\pagebreak
+
+
+## Trajectories plot for each OM
+
+```{r fig6, fig.height=10,fig.width=10, fig.cap = paste0("Southern seabass stock. Trajectories plot for OM1")}
+plot(oms[[1]], plans[[1]])
+
+```
+
+\pagebreak
+
+
+```{r fig7, fig.height=10,fig.width=10, fig.cap = paste0("Southern seabass stock. Trajectories plot for OM2")}
+plot(oms[[2]], plans[[2]])
+
+```
+
+\pagebreak
+
+## Plotting single trajectories and medians for each OMs
+
+```{r}
+rp = oms$REF@refpts
+om1 = window(FLStockR(oms[[1]]@stock),end=2023)
+om1@refpts = FLPar(Fmsy=rp["FMSY"],Bmsy=rp["SBMSY"],Blim=rp["Blim"],MSY=rp["MSY"])
+stks1 = FLStocks(lapply(plans[[1]],function(x){
+  out = FLStockR(x@om@stock)
+  out@refpts = om1@refpts
+  out
+}))
+
+res1 = FLStocks(c(FLStocks(om1),stks1))
+names(res1)[1] = "om1"
+
+# Medians
+med1 = FLStocks(lapply(res1,function(x){stockMedians(x)}))
+```
+
+```{r}
+rp = oms$RED@refpts
+om2 = window(FLStockR(oms[[2]]@stock),end=2023)
+om2@refpts = FLPar(Fmsy=rp["FMSY"],Bmsy=rp["SBMSY"],Blim=rp["Blim"],MSY=rp["MSY"])
+stks2 = FLStocks(lapply(plans[[2]],function(x){
+  out = FLStockR(x@om@stock)
+  out@refpts = om1@refpts
+  out
+}))
+
+res2 = FLStocks(c(FLStocks(om2),stks2))
+names(res2)[1] = "om2"
+
+# Medians
+med2 = FLStocks(lapply(res2,function(x){stockMedians(x)}))
+```
+
+
+```{r fig8, fig.height=10,fig.width=10, fig.cap = paste0("Southern seabass stock. Trajectories plot for OM1 medians"), warning=FALSE}
+
+plotAdvice(med1)+geom_line(linewidth=0.8)+
+  scale_color_manual(values=c("black",sscol(length(stks1))))+
+  scale_x_continuous(breaks=seq(1960,fy,5))+
+  theme(axis.text.x = element_text(size=8, angle=90))+
+  guides(col = guide_legend(ncol = 1))
+
+```
+
+\pagebreak
+
+```{r fig9, fig.height=10,fig.width=10, fig.cap = paste0("Southern seabass stock. Trajectories plot for OM2 medians"), warning=FALSE}
+
+plotAdvice(med2)+geom_line(linewidth=0.8)+
+  scale_color_manual(values=c("black",sscol(length(stks2))))+
+  scale_x_continuous(breaks=seq(1960,fy,5))+
+  theme(axis.text.x = element_text(size=8, angle=90))+
+  guides(col = guide_legend(ncol = 1))
+
+```
+
+\pagebreak
+
+```{r fig10, fig.height=10,fig.width=10, fig.cap = paste0("Southern seabass stock. Trajectories plot for OM1, all"), warning=FALSE}
+
+plotAdvice(res1)+
+  scale_color_manual(values=c("black",sscol(length(stks1))))+
+  scale_fill_manual(values=c("black",sscol(length(stks1))))+
+  scale_x_continuous(breaks=seq(1960,fy,5))+
+  theme(axis.text.x = element_text(size=8, angle=90))+
+  guides(col = guide_legend(ncol = 1))
+
+```
+
+
+```{r fig11, fig.height=10,fig.width=10, fig.cap = paste0("Southern seabass stock. Trajectories plot for OM2, all"), , warning=FALSE}
+
+plotAdvice(res2)+
+  scale_color_manual(values=c("black",sscol(length(stks2))))+
+  scale_fill_manual(values=c("black",sscol(length(stks2))))+
+  scale_x_continuous(breaks=seq(1960,fy,5))+
+  theme(axis.text.x = element_text(size=8, angle=90))+
+  guides(col = guide_legend(ncol = 1))
+
+```
+
+\pagebreak
+
+
+## Select best HCR target and trigger combination
+
+```{r}
+perfCsv <- read.csv("msePerf_table.csv")
+#OM <- c("REF", "RED")
+OM <- c("REF")
+
+p05 <- subset(perfCsv, om %in% OM & (name == "P3(B<Blim)" & Median < 0.05))
+catchP05 <- subset(perfCsv, om %in% OM & (name == "Catch/MSY" & mp %in% p05$mp))
+bestCase <- subset(catchP05, Median == max(Median))
+bestCase <- bestCase %>%
+  select(mp, trigger, target)
+bestCase$target <- round(bestCase$target, 3)
+names(bestCase)[1] <- "MP"
+names(bestCase)[2] <- "Btrigger"
+names(bestCase)[3] <- "Ftarget"
+
+knitr::kable(bestCase,"pipe",
+      align ="lc",caption="Summary of estimated reference 
+      points for reference case model of Southern seabass stock")
+```
+
+
+# Estimate Blim with different methods as the minimum SSB level that resulted in a recruitment higher that the median and fractions of B0 and different fractions of B0
+
+```{r}
+library(StockRecruitSET)
+
+flsr <- as.FLSR(stk_single)
+S <- an(ssb(flsr))
+R <- an(rec(flsr))
+
+Bpaemp <- calcBlim(S, R, quant = 0.5, type = 1, nmin=1, AIC=TRUE)
+Blim_emp = round(Bpaemp/(exp(1.645*SSBcv)),0)
+Blim_emp_defCV = round(Bpaemp/(exp(1.645*0.2)),0) 
+Blim24 <- round(B0*0.24,0)
+Blim30 <- round(B0*0.30,0)
+
+###Bloss calculations
+Bloss = min(ssb(stk_single))
+BpaBloss= Bloss
+BlimBloss = BpaBloss/(exp(1.645*SSBcv))
+
+
+Bpaemp
+Blim_emp
+Blim_emp_defCV
+Blim24
+Blim30
+Bloss
+BpaBloss
+BlimBloss
+
+```
