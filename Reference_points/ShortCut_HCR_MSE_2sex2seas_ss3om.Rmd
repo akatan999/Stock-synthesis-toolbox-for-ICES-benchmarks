@@ -260,6 +260,9 @@ maindevs = unitSums(residuals[,ac(recyrs)])
 rho = cor(maindevs [,-1],maindevs [,-length(maindevs)])
 sigmaR =  mean(an(out$sigma_R_info[1,"SD_of_devs"])) # Realised sigR
 
+rho 
+sigmaR
+
 # MSY refpts
 Bmsy <- out$derived_quants$Value[out$derived_quants$Label=="SSB_MSY"]
 Fmsy <- out$derived_quants$Value[out$derived_quants$Label=="annF_MSY"]
@@ -402,7 +405,7 @@ For illustration the number of iterations are reduced to 100.
 
 ```{r}
 # NUMBER iterations
-it <- 100
+it <- 200
 ```
 
 Subset the 1000 simulated stock iterations to the first 100
@@ -677,15 +680,17 @@ Note that the default setting assumes 1 year lag between data (reference) year a
 ```{r,echo=FALSE}
 mseargs <- list(iy=dy, fy=fy, data_lag=1, management_lag=1, frq=1)
 
-load(file="rdata/mp_runs1.rdata",verbose=T)
+load(file="rdata/mp_runs1b.rdata",verbose=T)
 
-load(file="rdata/mp_runs2.rdata",verbose=T)
+load(file="rdata/mp_runs2b.rdata",verbose=T)
 
 run = run1[[1]][[1]]
 runs= c(run1,run2)
 runs = lapply(runs,function(x){
+  
   x[[1]]
 })
+
 
 ```
 
@@ -749,7 +754,7 @@ Btri = c(Btgt*c(0,rep(c(0.5,0.6,0.7),5)))
 
 hcrs= Map(function(x,y,z){
 p  = plotGFCM(fadv = x,btrigger =y,ftgt = x,btgt=z,blim=an(refpts["Blim"]),fmin=0,bclose=0,kobe  =FALSE,text=F,rel=F)
-p = p+ylim(0,max(Fadv)*1.2)
+p = p
 return(p)
 },x=Fadv,y=Btri,z=Btgt)
 # plot ggplot list
@@ -786,6 +791,7 @@ Now combine with the Fixed $F_{MSY}$ run and see if we can do better.
 scenarios = c("FixedFmsy",paste0(rep(c("Fmsy",rownames(Fx)),each=3),".Btri.",rep(c(0.5,0.6,0.7),5)))
 
 names(runs) = scenarios
+
 ```
 
 Save 
