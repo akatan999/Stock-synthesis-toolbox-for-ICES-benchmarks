@@ -36,11 +36,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "  " ,fig.align = 'center', cac
 
 ```
 
-
-
-
 Load packages
-
 
 ```{r, message=FALSE,warning=FALSE}
 # Load
@@ -51,7 +47,6 @@ library(mse)
 library(FLRef)
 library(ggpubr)
 library(mseviz)
-
 ```
 
 
@@ -74,7 +69,6 @@ The following glossary summarizes key HCR parameters and associated target and l
 that are considered for tuning the candidate HCRs to optimise the trade-offs between maximising fishing
 opportunity and risk:
 
-
 + $F_{MSY}$: target reference point for fishing mortality at Fmsy (or its proxy), (e.g. $F_{B35}$)
 
 + $B_{MSY}$: the average biomass around which the biomass fluctuated when fishing at $F_{MSY}$ or its proxy (e.g. $B_{35}$)
@@ -95,7 +89,7 @@ SS3 outputs are loaded with the `readFLSss3()` into an `FLStock` object. The fol
 In the following, the area outside is evaluated first.
 
 ```{r}
-run = "mon.27.8c9a"
+run = "Basecase_1902_TVsel"
 stk = window(ss3om::readFLSss3(run,wtatage = TRUE))
 # Fill NAs
 stk@m.spwn[] = 0
@@ -107,7 +101,6 @@ out = ss3om::readOutputss3(run)
 
 dir.create("rdata",showWarnings = F)
 ```
-
 
 Check that the fbar range is consistent with `ss.starter` input.
 
@@ -123,15 +116,11 @@ plot(stk,metrics=list(SSB=function(x)unitSums(ssb(x)[,,,1]),F=function(x)fbar(x)
 
 Convert to combined sex trajectories to test `stockMedians()` adjustment
 
-
 ```{r , message=FALSE,warning=FALSE,fig.height=10,fig.width=6, fig.cap = paste0("Seasonal  stock trajectories") }
 stkm = stockMedians(stk)
 plot(FLStocks(Median=stkm))+theme_bw()+ylab("F")+xlab("Year")
 
 ```
-
-
-
 
 \pagebreak
 
@@ -179,8 +168,6 @@ plotbioyr(stk)+
 plotbioage(stk)+theme(legend.position = "none")
 ```
 
-
-
 \pagebreak
 
 ## Consistency checks using backtesting
@@ -222,7 +209,7 @@ residuals <- FLQuant(exp(recruit$dev - 0.5 * recruit$biasadjuster *sigR^2),
 recs = FLQuant(recruit$pred_recr, dimnames = c(age = 0, dms), units = "")
 
 
-if (dims(stk)$unit == 2) recs <- expand(recs, unit = c("F", "M"))
+if (dims(stk)$unit == 2) recs <- FLCore::expand(recs, unit = c("F", "M"))
 ```
 
 ```{r}
@@ -257,9 +244,9 @@ B0 = params(sra)[[3]]
 # Main recdevs
 recyrs = recruit$Yr[recruit$era =="Main"]
 maindevs = unitSums(residuals[,ac(recyrs)])
-rho = cor(maindevs [,-1],maindevs [,-length(maindevs)])
-sigmaR =  mean(an(out$sigma_R_info[1,"SD_of_devs"])) # Realised sigR
-
+rho = max(cor(maindevs [,-1],maindevs [,-length(maindevs)]),0)
+#sigmaR =  mean(an(out$sigma_R_info[1,"SD_of_devs"])) # Realised sigR
+sigmaR = out$sigma_R_in
 rho 
 sigmaR
 
@@ -288,7 +275,7 @@ Bx = FLPar(Bfx/100 *B0,params=paste0("B",Bfx))
 Find corresponding $F_{Bx}$ with bisection algorithm
 
 
-Test search for Fb40
+Test search for Fb35
 
 ```{r,eval=F}
 
@@ -303,7 +290,6 @@ Check
 
 ```{r,echo=F}
 load(file="rdata/fbisect.rdata")
-
 
 ```
 
@@ -337,7 +323,6 @@ Fx = do.call(c,lapply(an(Bx),function(x){
 ```{r,echo=F}
 save(Fx,Fb35,file="rdata/fbisect.rdata")
 
-
 ```
 
 ```{r}
@@ -356,7 +341,6 @@ Create `FLStockR` with `@refpts`
 stkr = FLStockR(stka)
 
 stkr@refpts = refpts
-
 
 ```
 
@@ -386,7 +370,6 @@ Load OM conditioned to Stock Synthesis
 load("rdata/om.ss3ref.rdata",verbose=T)
 ```
 
-
 Next set up the MSE horizon
 
 ```{r}
@@ -405,7 +388,7 @@ For illustration the number of iterations are reduced to 100.
 
 ```{r}
 # NUMBER iterations
-it <- 200
+it <- 20
 ```
 
 Subset the 1000 simulated stock iterations to the first 100
@@ -419,7 +402,7 @@ Generate recruitment
 ```{r}
 srdevs <- rlnormar1(n=it,sdlog=spars["sigmaR"], rho=spars["rho"], years=seq(dy, fy))
 # Sex-structured
-if (dims(stki)$unit == 2) srdevs  <- expand(srdevs , unit = c("F", "M"))
+if (dims(stki)$unit == 2) srdevs  <- FLCore::expand(srdevs , unit = c("F", "M"))
 
 ```
 
@@ -439,8 +422,6 @@ Next add the structure for the future years: average of last 3 years
 om <- fwdWindow(om, end=fy)
 
 ```
-
-
 
 
 Next, a so called observation error is constructed. In the case of the short-cut MSE, it simply holds the "perfect" stock information. For a full MSE with inbuilt estimation model  it would also generate the observations with errors, such a catch-at-age and survey numbers at age for SAM or a4a, or biomass surveys indices and catches for SPicT or JABBA.  
@@ -675,14 +656,12 @@ This rule can now be run passing on the `om`, `oem` and `arule` and an additiona
 Note that the default setting assumes 1 year lag between data (reference) year and assessment (reporting) year and that the TAC is implemented the next year. In case the assessment is conducted in 2023, based on data from 2022 and the TAC is implemented for 2024.
 
 
-
-
 ```{r,echo=FALSE}
 mseargs <- list(iy=dy, fy=fy, data_lag=1, management_lag=1, frq=1)
 
-load(file="rdata/mp_runs1b.rdata",verbose=T)
+#load(file="rdata/mp_runs1b.rdata",verbose=T)
 
-load(file="rdata/mp_runs2b.rdata",verbose=T)
+#load(file="rdata/mp_runs2b.rdata",verbose=T)
 
 run = run1[[1]][[1]]
 runs= c(run1,run2)
@@ -698,7 +677,7 @@ runs = lapply(runs,function(x){
 mseargs <- list(iy=dy, fy=fy, data_lag=1, management_lag=1, frq=1)
 
 system.time(
-run <- mp(om, oem=oem, ctrl=arule, args=mseargs,verbose=T)
+run <- mp(om, oem=oem, ctrl=arule, args=mseargs,verbose=T, parallel =FALSE)
 )
 
 ```
@@ -780,9 +759,41 @@ save(om,oem,arule,hcrs,mseargs,file="rdata/inpMP.rdata")
 These changes in parameters can simply be passed on to the existing `arule` to run the variations with `mps`.  
 
 ```{r,eval=FALSE,warning=FALSE}
-runs <- mps(om, oem=oem, ctrl=arule, args=mseargs,
-  hcr=hcrs)
+ni=length(hcrs$target)
+cl = 8
+library(doParallel)
+registerDoParallel(cl)
+. <- foreach(i = seq(ni)) %dopar% {
+  library(FLRef)
+  library(mse)
+  return(NULL)
+}
+```
 
+
+```{r,eval=FALSE,warning=FALSE}
+start = Sys.time()
+runs <- foreach(i = seq(ni)) %dopar% {
+  
+  hs = hcrs 
+  hs$target = hs$target[i]
+  hs$trigger = hs$trigger[i]
+  
+  runi <- mps(om, oem=oem, ctrl=arule, args=mseargs,hcr=hs,parallel = FALSE)
+  
+  return(runi)
+} # end of loop 
+end = Sys.time()
+time = end-start
+time
+
+```
+
+```{r,eval=FALSE,warning=FALSE}
+runs = lapply(runs,function(x){
+  
+  x[[1]]
+})
 ```
 
 Now combine with the Fixed $F_{MSY}$ run and see if we can do better.
