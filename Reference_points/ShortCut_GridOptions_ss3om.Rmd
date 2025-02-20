@@ -1,0 +1,370 @@
+---
+title: "Short-Cut grid options"
+
+author: 
+ - Henning Winker (GFCM) 
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    #keep_tex: false
+vignette: >
+  %\VignetteIndexEntry{ss3daigs Vignetted}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r wrap-hook, echo = FALSE,warning=FALSE,message=FALSE}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "  " ,fig.align = 'center', cache=FALSE,tidy.opts=list(width.cutoff=55), tidy=TRUE)
+
+```
+
+
+
+
+Load packages
+
+
+```{r, message=FALSE,warning=FALSE}
+# Load
+library(ggplot2)
+library(FLCore)
+library(ggplotFL)
+library(mse)
+library(FLRef)
+library(ggpubr)
+library(mseviz)
+
+```
+
+
+# Short-Cut MSE grid
+
+(1) $F_{tgt}$ tuning as ratio of $F_{eqsim}$ 
+
+(2) $F_{Bx}$ tuning as a gradient of $B/B_{0}$ starting from $B_{MSY}/B_{0}$  
+
+
+## Glossary
+
+The following glossary summarizes key HCR parameters and associated target and limit reference points that are considered for tuning the candidate HCRs to optimise the trade-offs between maximizing fishing opportunity and risk:
+
+
++ $B_{lim}$: a deterministic biomass limit reference point below which a stock is considered to have reduced reproductive capacity. Here $B_{lim}$ was set to $0.25B_{tgt}$ 
+
++ $F_{mmy}$: Stochastic maximum median yield from EQSiM
+
++ $F_{p0.5}$ $F$ that leads to 5\% probability that $B$ is not exceeding $B_{lim}$
+
++ $F_{eqsim}$: Outcome of $F_{eq} = min(F_{pa},F_{mmy}$ 
+
++ $F_{MSYss}$: "true" property of $F_{MSY}$ in the OM, i.e. SS3 estimate 
+
++ $B_{MSYss}$: the average biomass around which the biomass fluctuated when fishing at $F_{MSYss}$ 
+
++ $F_{pa}$: Robust $F_{p0.5}$ as conformined with feedback advice control (short-cut MSE) 
+
++ $F_{msy}$:  $F_{MSY} = min(F_{eq},F_{pa}$, which can be further optimised to improve catch performance, through $B_{trigger}$ tuning 
+
++ $B_{pa}$: a precautionary biomass reference point set with high probability that biomass is above $B_{lim}$, which acts as a safety margin below which the risk of reduced reproductive capacity is increasing. When the biomass is estimated to be above Bpa, the stock is considered to be within safe biological limits in terms of its reproductive capacity. 
+
++ $C_{adv}$: advised catch as output of the management procedure 
+
++ $B_{trigger}$: biomass trigger point of the HCR, specified as change point of biomass below which fishing mortality reduced relative to Ftgt. Specified  
+
+
+
+# Build FLStock
+
+SS3 outputs are loaded with the `readFLSss3()` into an `FLStock` object. The folder that contains the model outputs has to be specified.
+
+In the following, the area outside is evaluated first.
+
+```{r}
+run = "mon.27.8c9a"
+stk = window(ss3om::readFLSss3(run,wtatage = TRUE))
+# Fill NAs
+stk@m.spwn[] = 0
+stk@harvest.spwn[] = 0 
+sr = ss3om::readFLSRss3(run)
+stk@name = "mon.27.8c9a"
+stk@desc = "2024, ICES, SS3"
+out = ss3om::readOutputss3(run)
+
+dir.create("rdata",showWarnings = F)
+```
+
+
+
+\pagebreak
+
+## Consistency checks using backtesting
+
+Set seed
+
+```{r}
+set.seed(1507)
+```
+
+Get bias adjusted recruitment deviations from ss3 model
+
+Simplify to annual sex-structured model
+
+```{r}
+if(dims(stk)$season>1){
+stka = simplify(stk,'season',weighted = TRUE,harvest=TRUE)
+
+discards.wt(stka) = stock.wt(stka)
+stka@discards  =  computeDiscards(stka)
+# Make annual sra
+sra = sr
+params(sra) = FLPar(an(sr@params[,1]),params=rownames(sr@params))
+} else {
+sra = sr
+stka = stk
+  
+}
+```
+
+
+```{r}
+yrs = an(dimnames(stk)$year)
+recruit = out$recruit[out$recruit$Yr%in%yrs,]
+dms <- list(year = yrs)
+sigR =  mean(an(out$sigma_R_info[1:2,"SD_of_devs_over_sigma_R"])) # Realised sigR
+residuals <- FLQuant(exp(recruit$dev - 0.5 * recruit$biasadjuster *sigR^2), 
+        dimnames = c(age = 0, dms), units = "")
+recs = FLQuant(recruit$pred_recr, dimnames = c(age = 0, dms), units = "")
+
+
+if (dims(stk)$unit == 2) recs <- expand(recs, unit = c("F", "M"))
+```
+
+```{r}
+
+testC = fwd(stka,sr=recs[,ac(1981:2023)],
+  control=fwdControl(year=1981:2023, value=(unitSums(catch(stka)[, ac(1981:2023)])),
+  quant="catch"))
+
+testF = fwd(stka, sr=recs[,ac(1981:2023)],
+  control=fwdControl(year=1981:2023, value=unitMeans(fbar(stka)[, ac(1981:2023)]),
+  quant="fbar"))
+
+
+```
+
+```{r hc1, message=FALSE,warning=FALSE,fig.width=9,fig.height=7, fig.cap = paste0("Comparison of stock trajectories from ss3om and a backtest under the same Fbar") }
+
+plot(window(FLStocks(ss3om=stka,backtestC=testC,backtestF=testF)))+theme_bw()+facet_wrap(~qname,scale="free_y")
+
+
+```
+
+Note that minor deviations are likely due to difficulties in precisely adjusting the rec devs with bias correction.
+
+## Estimate candidate reference points
+
+```{r}
+# Extract pars
+s = params(sra)[[1]]
+R0 = params(sra)[[2]]
+B0 = params(sra)[[3]]
+# Main recdevs
+recyrs = recruit$Yr[recruit$era =="Main"]
+maindevs = unitSums(residuals[,ac(recyrs)])
+rho = cor(maindevs [,-1],maindevs [,-length(maindevs)])
+sigmaR = out$sigma_R_in
+rho 
+sigmaR
+
+# MSY refpts
+Bmsy <- out$derived_quants$Value[out$derived_quants$Label=="SSB_MSY"]
+Fmsy <- out$derived_quants$Value[out$derived_quants$Label=="annF_MSY"]
+MSY <- out$derived_quants$Value[out$derived_quants$Label=="Dead_Catch_MSY"]
+
+# Short cut devs
+ay = out$endyr # assessment year
+SSBcv <- out$derived_quants$StdDev[out$derived_quants$Label==paste0("SSB_",ay)]/
+  out$derived_quants$Value[out$derived_quants$Label==paste0("SSB_",ay)]
+
+Fcv <- out$derived_quants$StdDev[out$derived_quants$Label==paste0("F_",ay)]/
+  out$derived_quants$Value[out$derived_quants$Label==paste0("F_",ay)]
+
+```
+
+# Reference point grid
+
+
+Function to find $B$ for $F$ at equilibrium
+
+```{r}
+fwdB4F = function(stock,sr,Fs=0.2,nfy=200){
+
+    if (class(stock) == "FLStockR") {
+     
+        stock = as(stock, "FLStock")
+    }
+    fyrs = (dims(stock)$maxyear + 1):(dims(stock)$maxyear + nfy)
+    nfy = length(fyrs)
+    stkf = stf(stock, nfy)
+    
+    bx = do.call(c, lapply(an(Fs),function(x){
+    ictrl = fwdControl(data.frame(year = fyrs, quant =  "fbar", value = x))
+    out = fwd(stkf, sr = sr, control = ictrl)
+    an(tail(unitSums(ssb(out))))
+    }))
+    
+    data.frame(F=an(Fs),B=bx)
+}
+
+```
+
+```{r,echo=F}
+load(file="rdata/ftune.grid.rdata")
+```
+
+Set $B_{MSY}$ proxies as ratio of $B_0$
+
+```{r}
+BmsyB0 = Bmsy/B0
+
+BmsyB0
+
+startB = ceiling(BmsyB0*20)/2*10
+startB
+```
+
+```{r}
+Bfx = seq(startB,40,2.5)
+Bx = FLPar(Bfx/100 *B0,params=paste0("B",Bfx)) 
+
+```
+
+
+
+
+Run 
+
+```{r,eval=F}
+Fbx = do.call(c,lapply(an(Bx),function(x){
+  fs = fwdF4B(stka,sra,btgt = x,nfy=100,niy=0,ftune=c(0.3*Fmsy,1.5*Fmsy),tol=10e-4,verbose= F)
+  an(tail(unitMeans(fbar(fs)),1))
+}))
+```
+
+
+
+
+
+Hypothetical $F_{MSY}$ and $B_{trigger}$ from eqsim output
+
+```{r}
+Feq = Fmsy*0.93
+Btri.eq = 0.1*B0*1.44
+Beq = fwdB4F(stka,sra,Fs=Feq,nfy=200)$B
+```
+
+Add EQSIM and "true" Fmsy
+
+
+```{r}
+Fb.tune   = FLPar(c(Fmsy,Feq,Fbx,Bmsy,Beq,Bx),
+                  params=c("Fmsy","Feq",paste0("Fb",Bfx),"Bmsy","Beq",paste0("B",Bfx)))
+
+```
+
+
+
+
+
+```{r}
+Fx = rev(seq(0.5,0.95,0.05))
+Ftgt = FLPar(Fx*Feq,params=paste0(Fx,".Fq")) 
+```
+
+```{r,eval=F}
+Bftgt = fwdB4F(stka,sra,Fs=Ftgt,nfy=200)
+
+Bftgt
+
+```
+
+
+
+
+```{r}
+Ftgt.tune = FLPar(c(Fmsy,Feq,Bftgt$F,Bmsy,Beq,Bftgt$B),params=c("Fmsy","Feq",paste0(Fx,"Ftgt"),"Bmsy","Fmsy",paste0(Fx,"Bftgt"))) 
+
+```
+
+
+```{r,echo=F}
+save(Fbx ,Bftgt,Fb.tune, Ftgt.tune,file="rdata/ftune.grid.rdata")
+
+```
+
+
+```{r}
+np = an(nrow(Fb.tune))
+
+df1 = data.frame(
+Tune = rownames(Fb.tune)[1:(np/2)],
+Ftgt = round(an(Fb.tune)[1:(np/2)],3),
+Btri.eq = round(Btri.eq,1),
+Btgt = round(an(Fb.tune)[(np/2+1):np],1),
+"xB0" =  round(an(Fb.tune)[(np/2+1):np]/B0,3))
+
+```
+
+
+```{r}
+np = an(nrow(Ftgt.tune))
+
+df2 = data.frame(
+Tune = rownames(Ftgt.tune)[1:(np/2)],
+Ftgt = round(an(Ftgt.tune)[1:(np/2)],3),
+Btri.eq = round(Btri.eq,1),
+Btgt = round(an(Ftgt.tune)[(np/2+1):np],1),
+"xB0" =  round(an(Ftgt.tune)[(np/2+1):np]/B0,3))
+```
+
+\pagebreak
+
+```{r}
+knitr::kable(df1,"pipe",
+      align ="lccccc",
+      caption="Option 1: Initial tuning grid with EQSIM Btrigger based on Fbx.")
+```
+
+
+\pagebreak
+
+```{r}
+knitr::kable(df2,"pipe",
+      align ="lccccc",
+      caption="Option 2: Initial tuning grid with EQSIM Btrigger based on Feq tuning.")
+
+```
+
+
+
+## Stage 2
+
+Tuning for range of Fs with Btrigger 
