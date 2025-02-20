@@ -286,7 +286,7 @@ Add EQSIM and "true" Fmsy
 
 ```{r}
 Fb.tune   = FLPar(c(Fmsy,Feq,Fbx,Bmsy,Beq,Bx),
-                  params=c("Fmsy","Feq",paste0("Fb",Bfx),"Bmsy","Beq",paste0("B",Bfx)))
+                  params=c("Fmsy.om","Feq",paste0("Fb",Bfx),"Bmsy","Beq",paste0("B",Bfx)))
 
 ```
 
@@ -310,7 +310,7 @@ Bftgt
 
 
 ```{r}
-Ftgt.tune = FLPar(c(Fmsy,Feq,Bftgt$F,Bmsy,Beq,Bftgt$B),params=c("Fmsy","Feq",paste0(Fx,"Ftgt"),"Bmsy","Fmsy",paste0(Fx,"Bftgt"))) 
+Ftgt.tune = FLPar(c(Fmsy,Feq,Bftgt$F,Bmsy,Beq,Bftgt$B),params=c("Fmsy.om","Feq",paste0(Fx,"Feq"),"Bmsy","Fmsy",paste0(Fx,"Bftgt"))) 
 
 ```
 
@@ -331,6 +331,8 @@ Btri.eq = round(Btri.eq,1),
 Btgt = round(an(Fb.tune)[(np/2+1):np],1),
 "xB0" =  round(an(Fb.tune)[(np/2+1):np]/B0,3))
 
+df1$Btri.eq[1] = 0
+
 ```
 
 
@@ -343,6 +345,10 @@ Ftgt = round(an(Ftgt.tune)[1:(np/2)],3),
 Btri.eq = round(Btri.eq,1),
 Btgt = round(an(Ftgt.tune)[(np/2+1):np],1),
 "xB0" =  round(an(Ftgt.tune)[(np/2+1):np]/B0,3))
+
+
+
+df2$Btri.eq[1] = 0
 ```
 
 \pagebreak
