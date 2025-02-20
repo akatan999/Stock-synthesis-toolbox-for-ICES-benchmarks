@@ -13,6 +13,14 @@ hcrs1$trigger = hcrs1$trigger[ids]
 ni = length(ids)
 cl = ni
 registerDoParallel(cl)
+
+# load R packages in parallel workers on Windows
+. <- foreach(i = seq(ni)) %dopar% {
+  library(FLRef)
+  library(mse)
+  return(NULL)
+}
+
 start = Sys.time()
 run1 <- foreach(i = seq(ni)) %dopar% {
   
